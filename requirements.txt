@@ -4,7 +4,7 @@ lxml==5.3.0              # fast parser backend for BeautifulSoup
 rank_bm25==0.2.2         # BM25 lexical retrieval (the sparse half of hybrid)
 chromadb==1.5.9          # local persisted vector store; 1.5.x ships cp313 Windows wheels (0.5.x needs a C++ build)
 openai==1.59.6           # embeddings only (text-embedding-3-small)
-anthropic==0.42.0        # chat LLM (decompose + synthesize)
+anthropic==0.109.1       # chat LLM (decompose + synthesize); 0.42 lacked output_config (structured JSON)
 fastapi==0.115.6         # backend
 uvicorn==0.34.0          # ASGI server
 python-dotenv==1.0.1     # load .env

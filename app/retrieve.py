@@ -1,0 +1,86 @@
+"""Phase 3 — hybrid retrieval: BM25 (lexical) + dense (embeddings) fused with reciprocal rank fusion.
+
+The dense half also yields the NORMALIZED similarity of the top chunk, which the refusal gate
+uses (RRF scores are rank-based and have no absolute meaning, so the gate must not sit on them).
+"""
+
+import json
+import re
+from functools import lru_cache
+
+import chromadb
+from openai import OpenAI
+from rank_bm25 import BM25Okapi
+
+from app import config
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
+def _tok(text: str) -> list[str]:
+    return _TOKEN_RE.findall(text.lower())
+
+
+@lru_cache(maxsize=1)
+def _load():
+    """Load chunks + build the BM25 index and Chroma handle once (cached)."""
+    chunks = json.loads(open(config.CHUNKS_PATH, encoding="utf-8").read())
+    by_id = {c["chunk_id"]: c for c in chunks}
+    ids = [c["chunk_id"] for c in chunks]
+    bm25 = BM25Okapi([_tok(c["text"]) for c in chunks])
+    coll = chromadb.PersistentClient(path=config.CHROMA_DIR).get_collection(config.COLLECTION)
+    return chunks, by_id, ids, bm25, coll
+
+
+@lru_cache(maxsize=256)
+def _embed_query(query: str) -> tuple[float, ...]:
+    resp = OpenAI().embeddings.create(model=config.EMBED_MODEL, input=[query])
+    return tuple(resp.data[0].embedding)
+
+
+def _dense(query: str, tickers: tuple[str, ...], n: int) -> list[tuple[str, float]]:
+    """Return [(chunk_id, cosine_similarity)] best-first."""
+    _, _, _, _, coll = _load()
+    where = {"ticker": {"$in": list(tickers)}} if tickers else None
+    res = coll.query(query_embeddings=[list(_embed_query(query))], n_results=n, where=where)
+    ids, dists = res["ids"][0], res["distances"][0]
+    return [(cid, 1.0 - dist) for cid, dist in zip(ids, dists)]  # cosine sim = 1 - cosine distance
+
+
+def _bm25(query: str, tickers: tuple[str, ...], n: int) -> list[str]:
+    chunks, _, ids, bm25, _ = _load()
+    scores = bm25.get_scores(_tok(query))
+    order = sorted(range(len(ids)), key=lambda i: scores[i], reverse=True)
+    out = []
+    for i in order:
+        if tickers and chunks[i]["ticker"] not in tickers:
+            continue
+        out.append(ids[i])
+        if len(out) >= n:
+            break
+    return out
+
+
+def retrieve(query: str, tickers: list[str] | None, k: int) -> dict:
+    """Hybrid retrieve. Returns {chunks: [chunk dict...], top_sim: float}.
+
+    top_sim is the dense cosine similarity of the single best chunk (for the refusal gate)."""
+    _, by_id, _, _, _ = _load()
+    tkey = tuple(tickers or ())
+    pool = max(k * 3, 20)  # fuse over a wider candidate pool, then take top k
+    dense = _dense(query, tkey, pool)
+    sparse = _bm25(query, tkey, pool)
+    top_sim = dense[0][1] if dense else 0.0
+
+    # Reciprocal rank fusion over the two ranked lists.
+    fused: dict[str, float] = {}
+    for rank, (cid, _) in enumerate(dense):
+        fused[cid] = fused.get(cid, 0.0) + 1.0 / (config.RRF_K + rank)
+    for rank, cid in enumerate(sparse):
+        fused[cid] = fused.get(cid, 0.0) + 1.0 / (config.RRF_K + rank)
+
+    top_ids = sorted(fused, key=lambda c: fused[c], reverse=True)[:k]
+    return {
+        "chunks": [{**by_id[cid], "fused_score": fused[cid]} for cid in top_ids],
+        "top_sim": top_sim,
+    }

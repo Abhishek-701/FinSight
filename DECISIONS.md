@@ -11,6 +11,14 @@ Updated as choices are made (guardrail G7), not batched at the end.
 - Routing: regex/alias map (no LLM) for explainability + determinism.
 - Refusal: two distinct gates (out-of-corpus threshold on normalized dense similarity; in-corpus-undisclosed via synthesis/gaps).
 
+### Phase 3 — chat model choice (2026-06-10)
+- Chat model = `claude-sonnet-4-6` (NOT Opus 4.8). Reason: the spec mandates temperature 0
+  everywhere for determinism (G5). Opus 4.8/4.7 REMOVED the `temperature` parameter — passing
+  it returns HTTP 400 — so temp-0 determinism is impossible on Opus. Sonnet 4.6 still accepts
+  `temperature=0`, is well-suited to this extractive decomposition+synthesis task, and is
+  cheaper ($3/$15 per 1M vs $5/$25). Decomposition uses structured JSON output
+  (`output_config.format`, json_schema); synthesis streams via `messages.stream()`.
+
 ## Dependencies (G2 — one line each)
 See requirements.txt; each line carries its justification.
 
@@ -52,6 +60,22 @@ See requirements.txt; each line carries its justification.
   largest table per company + 2 seeded-random table chunks. Spot-checked headline figures by
   hand: AAPL total net sales 416,161; WMT total revenues 713,163; NVDA revenue 215,938 — all
   correct and bound to the right fiscal year.
+
+### Phase 3 — retrieval, gates, threshold calibration (2026-06-10)
+- Hybrid retrieval = BM25 (rank_bm25, over all chunks) + dense (OpenAI embeddings in Chroma,
+  cosine) fused with reciprocal rank fusion (RRF_K=60). Company metadata filter on the dense
+  side via Chroma `where`, on the sparse side by post-filtering. top-k 6 single / 4 per sub-query.
+- Refusal gate 1 (out-of-corpus) sits on the NORMALIZED dense cosine similarity of the top chunk,
+  NOT the RRF score (RRF is rank-based, no absolute meaning).
+- Threshold provisionally calibrated to 0.50 from the four Phase-3 checkpoint probes:
+    NVIDIA revenue 0.697 | R&D sub-queries 0.61-0.71 | Coca-Cola attrition 0.518 (in-corpus,
+    undisclosed) | Tesla revenue 0.487 (out-of-corpus).
+  0.50 sits between Tesla (out) and KO-attrition (in), so Tesla refuses via the THRESHOLD gate
+  and KO-attrition passes the threshold then refuses via the SYNTHESIS/gaps gate — the two-gate
+  design. Margin is thin (~0.015 each side) — Known Weakness #5; Phase 6 refines with the user's
+  eval probes (per-query-type thresholds are the next-week fix).
+- anthropic SDK upgraded 0.42.0 -> 0.109.1: 0.42 predates `output_config` (structured JSON output
+  used for decomposition). Verified the four checkpoint questions behave per spec after upgrade.
 
 ## Filings used (Phase 1, fetched 2026-06-10 from EDGAR)
 | Ticker | Company | Form | Accession | Filed | Fiscal period end (from doc name) |
