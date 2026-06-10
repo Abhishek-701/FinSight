@@ -2,7 +2,7 @@
 beautifulsoup4==4.12.3   # real HTML parser; strips <style>/<script>/hidden nodes (G: CSS-residue)
 lxml==5.3.0              # fast parser backend for BeautifulSoup
 rank_bm25==0.2.2         # BM25 lexical retrieval (the sparse half of hybrid)
-chromadb==0.5.23         # local persisted vector store for dense retrieval
+chromadb==1.5.9          # local persisted vector store; 1.5.x ships cp313 Windows wheels (0.5.x needs a C++ build)
 openai==1.59.6           # embeddings only (text-embedding-3-small)
 anthropic==0.42.0        # chat LLM (decompose + synthesize)
 fastapi==0.115.6         # backend
