@@ -67,10 +67,10 @@ def retrieve(query: str, tickers: list[str] | None, k: int) -> dict:
     top_sim is the dense cosine similarity of the single best chunk (for the refusal gate)."""
     _, by_id, _, _, _ = _load()
     tkey = tuple(tickers or ())
-    pool = max(k * 3, 20)  # fuse over a wider candidate pool, then take top k
+    pool = config.RERANK_POOL if config.USE_RERANKER else max(k * 3, 20)
     dense = _dense(query, tkey, pool)
     sparse = _bm25(query, tkey, pool)
-    top_sim = dense[0][1] if dense else 0.0
+    top_sim = dense[0][1] if dense else 0.0  # gate uses dense sim, independent of reranking
 
     # Reciprocal rank fusion over the two ranked lists.
     fused: dict[str, float] = {}
@@ -79,8 +79,11 @@ def retrieve(query: str, tickers: list[str] | None, k: int) -> dict:
     for rank, cid in enumerate(sparse):
         fused[cid] = fused.get(cid, 0.0) + 1.0 / (config.RRF_K + rank)
 
-    top_ids = sorted(fused, key=lambda c: fused[c], reverse=True)[:k]
-    return {
-        "chunks": [{**by_id[cid], "fused_score": fused[cid]} for cid in top_ids],
-        "top_sim": top_sim,
-    }
+    fused_ids = sorted(fused, key=lambda c: fused[c], reverse=True)
+    if config.USE_RERANKER:
+        from app import rerank  # lazy import so the model only loads when enabled
+        candidates = [{**by_id[cid], "fused_score": fused[cid]} for cid in fused_ids[:pool]]
+        chunks = rerank.rerank(query, candidates)[:k]
+    else:
+        chunks = [{**by_id[cid], "fused_score": fused[cid]} for cid in fused_ids[:k]]
+    return {"chunks": chunks, "top_sim": top_sim}

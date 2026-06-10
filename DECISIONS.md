@@ -90,6 +90,39 @@ See requirements.txt; each line carries its justification.
 - Side effect: re-embedding shifted KO-attrition probe 0.518 -> 0.503 (still > 0.50). Threshold
   margin is now razor-thin — reinforces Known Weakness #5; Phase 6 calibration with more probes.
 
+### Eval-driven failures and fixes (2026-06-10) — what broke, then how it was fixed
+The 9-question eval caught two real correctness failures (both in decomposed comparisons):
+
+WHAT BROKE
+- Q3 "which company had the highest total revenue": concluded **JPMorgan ($185,581M)** — WRONG
+  (Walmart ~$713B is highest). Under decomposition the consolidated income-statement chunks for
+  Apple/Walmart/Coca-Cola/JPM were not retrieved (top-k=4), so the model maxed over the few it had.
+- Q5 "compare Walmart vs Coca-Cola revenue": returned Walmart **$485,599M** — WRONG; that is the
+  Walmart **U.S. segment** total (chunk WMT-0182), not the **consolidated** $713,163M (WMT-0069/0099).
+  Right terminology ("Total revenues"), wrong scope — Known Weakness #3.
+- Note: the system did NOT hallucinate. Q3 honestly hedged ("among companies with available
+  figures"); Q5 pulled a real-but-wrong-scope line. The defect was retrieval, not grounding.
+
+FIX 1 — top_k_sub 4->8 + synthesis "prefer consolidated, label segment as segment-level".
+  Partial: Q3 now retrieves Apple's $416,161M, but the consolidated income-statement chunk still
+  ranks ~17-30 (verified: WMT-0069 only appears at k=30), so prose still outranks the buried table.
+
+FIX 2 — Phase 5 cross-encoder reranker (ms-marco-MiniLM-L-6-v2) over the top-30 fused candidates,
+  toggleable via config.USE_RERANKER.
+  - Q5: FIXED. Reranker pulls WMT-0099 (consolidated $713,163M) into context; answer now reports
+    $713,163M with the correct period. No regressions on the other 8 (refusals + lookups intact).
+  - Q3: STILL WRONG figure. The cross-encoder is phrasing-sensitive — for Q5's wording it surfaced
+    the consolidated chunk, for Q3's wording it surfaced the segment chunk (WMT-0182, $485,599M)
+    again. Both chunks literally say "Total revenues", so neither retrieval nor reranking reliably
+    distinguishes the U.S.-segment total from the company total.
+
+HONEST RESIDUAL (Known Weakness #3, not fully solved): segment-vs-consolidated is a CONCEPT-level
+distinction the system can't make from terminology alone. Next-week fix: (a) label segment-table
+rows with the segment name during parse so "Walmart U.S. | Total revenues = 485,599" is unambiguous;
+(b) XBRL/companyfacts cross-check of headline figures against the tagged consolidated facts;
+(c) concept-level checks in synthesis. Reranker left ON (net positive, no regressions) but it pulls
+a heavy torch dependency and is fully toggleable for the with/without comparison the brief asks for.
+
 ### Phase 6 — eval harness (2026-06-10)
 - eval/run_eval.py runs each question in eval/questions.yaml through the pipeline and writes
   eval/results.md: a table (route, refused, refusal reason, top_sim, citations, gaps) with BLANK

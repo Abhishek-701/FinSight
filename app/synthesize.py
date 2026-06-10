@@ -21,6 +21,9 @@ SYSTEM = (
     "'Not found in the provided filings for <Company>.' Do not substitute a different metric.\n"
     "- In any cross-company comparison, state each company's fiscal year end next to its figure "
     "(fiscal years differ: Apple ends in September, NVIDIA and Walmart in January, others in December).\n"
+    "- Prefer the CONSOLIDATED / total-company figure. If a number is a single segment or "
+    "geographic breakdown (e.g. one reportable segment's revenue), label it as segment-level and "
+    "do not present it as the company-wide total.\n"
     "- Be concise and factual. Report units as given (e.g. in millions)."
 )
 

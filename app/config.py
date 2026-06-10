@@ -13,7 +13,9 @@ TEMPERATURE = 0                          # determinism (G5)
 
 # --- Retrieval ---
 TOP_K_SINGLE = 6          # single-company question
-TOP_K_SUB = 4             # per sub-query when decomposed
+TOP_K_SUB = 8             # per sub-query when decomposed (raised 4->8: at 4 the consolidated
+                          # income-statement chunk fell outside range, so comparisons grabbed
+                          # segment/MD&A figures instead — see DECISIONS "eval-driven fix")
 RRF_K = 60                # reciprocal-rank-fusion constant (standard default)
 MAX_CONTEXT_CHUNKS = 24   # token/cost cap per question (G12)
 
@@ -23,6 +25,13 @@ MAX_CONTEXT_CHUNKS = 24   # token/cost cap per question (G12)
 # the Phase-3 probe scores (DECISIONS.md): Tesla 0.487 (out) vs KO-attrition 0.518 (in) vs real
 # hits 0.61-0.70. 0.50 sits in the gap. Phase 6 refines with the user's eval probes.
 DENSE_SIM_THRESHOLD = 0.50
+
+# --- Reranker (Phase 5, toggleable) ---
+# Cross-encoder rerank of the fused candidate pool. Fixes buried-table-row retrieval (a
+# consolidated total sitting among many numeric rows that prose outranks). Toggle to compare.
+USE_RERANKER = True
+RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+RERANK_POOL = 30          # fuse this many candidates, rerank them, then take top-k
 
 # --- Decomposition ---
 FANOUT_CAP = 12           # max sub-queries; beyond this, answer primary metric + state what was dropped
