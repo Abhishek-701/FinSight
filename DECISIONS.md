@@ -152,8 +152,58 @@ a heavy torch dependency and is fully toggleable for the with/without comparison
 All exact form "10-K" (no 10-K/A amendments). Note the differing fiscal year ends (Apple
 Sep, NVDA/WMT Jan, others Dec) — this matters for cross-company comparisons (Phase 6 eval).
 
-## Known weaknesses
-(filled at Phase 7 — see PLAN_2.md "Known weaknesses")
+## Key design tradeoffs (the "why", summarized)
+- **Pipeline, not agent.** A closed six-doc corpus does not need an agent. A deterministic pipeline
+  (router → [decompose] → retrieve → gate → synthesize) is fully debuggable and reproducible; an
+  agent would add nondeterminism and debugging surface for no benefit here. Cost: no autonomous
+  recovery from a bad retrieval — but that is exactly what the eval + manual grading expose.
+- **Regex/alias router, not an LLM router.** Chosen for full explainability and determinism (G5):
+  the same question always routes the same way and I can explain every branch in a walkthrough.
+  Cost: brittle on unlisted aliases and unusual phrasing (Known Weakness #4). A temp-0 LLM router
+  is the first next-week item.
+- **Two-gate refusal, not one.** (1) Out-of-corpus is caught by a threshold on the normalized dense
+  similarity of the top chunk (NOT the RRF score, which is rank-based and has no absolute meaning).
+  (2) In-corpus-but-undisclosed is caught by the synthesis prompt (context-only) + a per-company
+  `gaps` list — retrieval returns good-scoring company chunks that lack the figure, so the threshold
+  cannot catch it. Verified: Tesla/Microsoft refuse via gate 1; Coca-Cola attrition / JPMorgan NPS
+  refuse via gate 2.
+- **Embeddings on OpenAI, chat on Anthropic.** Anthropic has no embeddings API; dense retrieval
+  needs `text-embedding-3-small`. Chat is Sonnet 4.6 (temp-0 capable; Opus 4.8 removed `temperature`).
+- **Chunking:** ~800-token prose windows flushed at Item boundaries; tables kept whole and serialized
+  row-wise so each value carries its compound column header (number can't drift from its year).
 
-## Next week
-(filled at Phase 7)
+## Known weaknesses (state these plainly; claim only what was built and run)
+1. **Numeric fidelity inside complex tables is the top weakness.** Multi-level headers, per-column
+   units, and accounting negatives are handled, but verified by sampling + an alignment check, not
+   exhaustively. A misaligned or unusually structured table can still yield a confidently wrong
+   number. Fix: XBRL cross-check of headline figures against the `<ix:nonFraction>` facts in the
+   same files (the files are Inline XBRL; tags are present, e.g. ~1127 in NVDA).
+2. **Footnote linkage is local, not global.** Footnotes immediately following a table ride along in
+   its chunk and in-table markers are preserved as `[fn1]`, but there is no reference graph linking
+   an arbitrary marker to its note text. A figure whose qualifier lives elsewhere can be returned
+   unqualified. Fix: build the marker→note graph and attach the resolved note to the citing chunk.
+3. **Grounds on terminology, does not understand accounting.** Demonstrated live by eval Q3/Q5: the
+   system reported Walmart's **U.S.-segment** "Total revenues" ($485,599M) as the **consolidated**
+   total ($713,163M) — right term, wrong scope/concept. Per-figure citations make every answer
+   auditable by a human, but the system will not self-catch this. Fix: label segment-table rows with
+   the segment name at parse time; XBRL cross-check; concept-level checks / tighter retrieval on
+   near-miss line items.
+4. **Router brittleness.** Regex routing mis-handles unlisted aliases and unusual phrasing — a
+   deliberate trade for explainability and determinism. Fix: a temp-0 LLM router.
+5. **Refusal threshold calibrated on a handful of probes.** A single global value on a normalized-
+   dense-similarity scale is not optimal across query types, and the margin is thin (Tesla 0.48 /
+   Microsoft 0.454 out vs Coca-Cola-attrition 0.503 / JPMorgan-NPS 0.548 in — ~0.003 in one case).
+   Fix: per-query-type thresholds, or a cross-encoder relevance score for the gate.
+
+One-line summary for the room: **strong on retrieval and honesty, weaker on numeric fidelity inside
+complex tables (esp. segment-vs-consolidated), and here is exactly how I would close that gap.**
+
+## Next week (in priority order)
+1. **Temp-0 LLM router** for alias/phrasing robustness (closes Weakness #4).
+2. **XBRL / companyfacts cross-check** of headline figures against the tagged consolidated facts
+   (closes much of #1 and #3 — the segment-vs-consolidated error).
+3. **Label segment-table rows with the segment name** at parse time so segment totals can't
+   masquerade as company totals (#3).
+4. **Contextual / table-aware chunking** and a marker→footnote reference graph (#1, #2).
+5. **Per-query-type threshold calibration**, or move the gate onto the cross-encoder score (#5).
+6. **Harden the reranker** (it's phrasing-sensitive today) or try a finance-tuned cross-encoder.
