@@ -1,0 +1,15 @@
+# secrets
+.env
+
+# data (downloaded filings + vector store; reproducible via ingest)
+# Ignore data/ contents (incl. data/raw/) but keep the manifest: small provenance
+# record (accession #s, filing dates). data/* (not data/) so the negation can apply.
+data/*
+!data/manifest.json
+chroma/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/

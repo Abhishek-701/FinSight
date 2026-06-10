@@ -1,0 +1,12 @@
+# Each dependency is justified one line in DECISIONS.md (G2). No LangChain/LlamaIndex.
+beautifulsoup4==4.12.3   # real HTML parser; strips <style>/<script>/hidden nodes (G: CSS-residue)
+lxml==5.3.0              # fast parser backend for BeautifulSoup
+rank_bm25==0.2.2         # BM25 lexical retrieval (the sparse half of hybrid)
+chromadb==0.5.23         # local persisted vector store for dense retrieval
+openai==1.59.6           # embeddings only (text-embedding-3-small)
+anthropic==0.42.0        # chat LLM (decompose + synthesize)
+fastapi==0.115.6         # backend
+uvicorn==0.34.0          # ASGI server
+python-dotenv==1.0.1     # load .env
+pyyaml==6.0.2            # eval/questions.yaml
+tiktoken==0.8.0          # token counting for ~800-token chunking

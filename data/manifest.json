@@ -1,0 +1,68 @@
+[
+  {
+    "ticker": "AAPL",
+    "cik": "0000320193",
+    "form": "10-K",
+    "accession": "0000320193-25-000079",
+    "filing_date": "2025-10-31",
+    "primary_doc": "aapl-20250927.htm",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
+    "raw_path": "data\\raw\\AAPL.html",
+    "bytes": 1520208
+  },
+  {
+    "ticker": "JPM",
+    "cik": "0000019617",
+    "form": "10-K",
+    "accession": "0001628280-26-008131",
+    "filing_date": "2026-02-13",
+    "primary_doc": "jpm-20251231.htm",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/19617/000162828026008131/jpm-20251231.htm",
+    "raw_path": "data\\raw\\JPM.html",
+    "bytes": 12927325
+  },
+  {
+    "ticker": "WMT",
+    "cik": "0000104169",
+    "form": "10-K",
+    "accession": "0000104169-26-000055",
+    "filing_date": "2026-03-13",
+    "primary_doc": "wmt-20260131.htm",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/104169/000010416926000055/wmt-20260131.htm",
+    "raw_path": "data\\raw\\WMT.html",
+    "bytes": 2323981
+  },
+  {
+    "ticker": "KO",
+    "cik": "0000021344",
+    "form": "10-K",
+    "accession": "0001628280-26-010047",
+    "filing_date": "2026-02-20",
+    "primary_doc": "ko-20251231.htm",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/21344/000162828026010047/ko-20251231.htm",
+    "raw_path": "data\\raw\\KO.html",
+    "bytes": 3758140
+  },
+  {
+    "ticker": "NVDA",
+    "cik": "0001045810",
+    "form": "10-K",
+    "accession": "0001045810-26-000021",
+    "filing_date": "2026-02-25",
+    "primary_doc": "nvda-20260125.htm",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm",
+    "raw_path": "data\\raw\\NVDA.html",
+    "bytes": 1967816
+  },
+  {
+    "ticker": "CAT",
+    "cik": "0000018230",
+    "form": "10-K",
+    "accession": "0000018230-26-000008",
+    "filing_date": "2026-02-13",
+    "primary_doc": "cat-20251231.htm",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/18230/000001823026000008/cat-20251231.htm",
+    "raw_path": "data\\raw\\CAT.html",
+    "bytes": 6100469
+  }
+]
