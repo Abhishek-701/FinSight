@@ -22,6 +22,39 @@ question
 Two refusal mechanisms: a **retrieval threshold** (out-of-corpus, e.g. "Tesla's revenue") and a
 **synthesis/gaps gate** (in-corpus but undisclosed, e.g. "Coca-Cola's attrition rate").
 
+## Decision log (one page)
+
+*Filings used:* the six most recent 10-Ks from EDGAR; exact accession numbers + filing dates in
+[`data/manifest.json`](data/manifest.json) and DECISIONS.md.
+
+- **Chunking — why.** ~800-token prose windows (100 overlap), flushed at Item boundaries so a chunk
+  never straddles Items. Tables are kept whole and serialized **row-wise**, where each value carries
+  its compound column header, a `Consolidated` / `Segment-level` **scope tag**, and the table caption
+  — so a number can't drift from its year/scope, and a table is retrievable by its description, not
+  just its Item heading. (~2,440 chunks.)
+- **Embeddings — why.** OpenAI `text-embedding-3-small`: Anthropic has no embeddings API; it's cheap
+  and strong for dense retrieval.
+- **Retrieval — why.** Hybrid **BM25 + dense, fused with RRF**, company-filtered. Lexical catches
+  exact line-item terms, dense catches paraphrase, and RRF needs no cross-scorer calibration.
+- **Reranker — why + toggle.** Optional cross-encoder (`ms-marco-MiniLM-L-6-v2`) over the top-30,
+  `USE_RERANKER` in config. Surfaces a buried table row above prose; pulls `torch`, so it's toggleable.
+- **Generation & honesty.** Temp-0 `claude-sonnet-4-6` (Opus 4.8 removed `temperature`). Every figure
+  is cited to a chunk id; cross-company answers state each company's fiscal-year end. Two refusal
+  gates as above — refuse rather than guess.
+- **Routing — why.** Regex/alias map, no LLM, for determinism + explainability; the tradeoff is
+  brittleness on unlisted aliases/phrasing.
+
+**Where it breaks (honest).** Numeric fidelity inside complex tables is the weak spot. The eval's
+multi-company comparison (**Q3 — the deliberate failure case**) still returns a wrong figure: a
+*segment* "Total revenues" can be reported as the *consolidated* total — a concept-level (not
+terminology) error the system cannot self-catch. The in/out-of-corpus threshold margin is thin
+(~0.003 on one probe). Footnote linkage is local (adjacent notes only), not a global reference graph.
+
+**With another week.** XBRL/companyfacts as the source of truth for numbers, with a reconciliation
+cross-check against the scraped tables (closes the segment-vs-consolidated error at the root); a
+temp-0 LLM router; per-query-type thresholds; a footnote reference graph. Full detail + the running
+log in [DECISIONS.md](DECISIONS.md).
+
 ## Prerequisites
 
 - **Python 3.11+** (developed on 3.13). Git.
