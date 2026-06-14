@@ -228,3 +228,32 @@
          one cash-flow chunk). If only one is cited, the system failed to retrieve one of the
          two statements. Record both figures from the filing to verify. The difference between
          operating cash flow and net income (cash conversion) is the substance of the answer."
+
+# ── DELIBERATE FAILURE (brittleness probe) ────────────────────────────────────
+
+- question: "What was NVIDIA's Data Center segment revenue for its fiscal year ended January 25, 2026?"
+  category: segment_lookup
+  note: "DELIBERATE FAILURE — documents a known architectural gap in the XBRL fast path.
+
+         Actual system behavior (confirmed by probe run):
+           xbrl_hit=True, metric='revenue' — XBRL intercepts the query because the keyword
+           'revenue' matches before any segment check. The XBRL chunk only has the consolidated
+           total ($215,938M). Claude correctly says the segment figure is 'not found' rather
+           than misreporting the consolidated total, but the Data Center figure IS disclosed
+           in NVIDIA's Item 8 Segment Information note. It is never retrieved because XBRL
+           blocked RAG from running.
+
+         The correct answer is NVIDIA's Data Center segment revenue from Item 8. Look it up
+         in the 10-K to fill in the figure for grading. The segment figure is a large but
+         DISTINCT subset of the $215,938M consolidated total.
+
+         Root cause: xbrl_lookup's segment bail-out is hardcoded for a fixed list of known
+         segment names (Sam's Club, CAT Financial Products, ME&T). 'Data Center' is not on
+         that list, so the bail-out does not fire. A general fix requires either
+         (a) detecting compound-noun segment phrases before the metric keyword, or
+         (b) an LLM classifier for segment vs. consolidated intent.
+
+         Grade: correct=no (segment figure missing — answer says 'not found' which is honest
+                            but incomplete; the figure is in the filing);
+                grounded=no (XBRL chunk has no segment breakdown; RAG was never consulted);
+                refusal-correct=N/A."
