@@ -75,8 +75,9 @@ def build_xbrl_context(facts: list[dict]) -> tuple[str, list[dict]]:
         for f in ticker_facts:
             concept_label = _short(f["concept"])
             unit_note = " per share" if "pershare" in f["concept"].lower() else ""
+            # Use each fact's own period_end (not the header's) so YoY rows show distinct dates.
             lines.append(
-                f"Consolidated | {concept_label}{unit_note} | {period_end} = {f['value_display']}"
+                f"Consolidated | {concept_label}{unit_note} | {f['period_end']} = {f['value_display']}"
             )
 
         chunk_text = "\n".join(lines)

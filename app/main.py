@@ -37,16 +37,30 @@ def xbrl_lookup(question: str, route: dict) -> dict | None:
     mode = route["mode"]
     tickers = route["tickers"]
 
-    # Detect canonical metric from question text (deterministic regex, no LLM)
-    metric: str | None = None
-    for pattern, m in config.XBRL_KEYWORD_MAP:
-        if re.search(pattern, question, re.I):
-            metric = m
-            break
-    if not metric:
+    # Bail out immediately for segment-specific questions.
+    # XBRL only holds consolidated totals; questions about named subsidiaries/segments
+    # (e.g. "Sam's Club's net sales") should fall through to RAG which indexes
+    # the segment tables from Item 8.
+    _SEGMENT_BAIL_RE = re.compile(
+        r"\b(sam'?s?\s*club|financial\s+products?\s+(segment|revenues?)|"
+        r"me&t\b|wholesale\s+club)\b",
+        re.I,
+    )
+    if _SEGMENT_BAIL_RE.search(question):
         return None
 
-    # Year-over-year intent: fetch both annual_recent and annual_prior
+    # Collect ALL matching metrics (multi-metric support for complex questions like
+    # "cash flow vs net income" or "R&D as % of revenue"). First-match-wins would
+    # miss the second metric; here we gather every distinct match.
+    matched_metrics: list[str] = []
+    for pattern, m in config.XBRL_KEYWORD_MAP:
+        if re.search(pattern, question, re.I) and m not in matched_metrics:
+            matched_metrics.append(m)
+
+    if not matched_metrics:
+        return None
+
+    # Year-over-year intent applies to all matched metrics.
     is_yoy = bool(re.search(
         r"\b(change|increase|decrease|from\s+\d{4}\s+to|year.over.year|yoy|prior\s+year"
         r"|compar.{0,10}year|both\s+year|each\s+year)\b",
@@ -55,8 +69,23 @@ def xbrl_lookup(question: str, route: dict) -> dict | None:
 
     fact_list: list[dict] = []
 
-    if mode == "decompose":
-        for ticker in tickers:
+    for metric in matched_metrics:
+        if mode == "decompose":
+            for ticker in tickers:
+                if is_yoy:
+                    rec, pri = facts_mod.query_yoy(metric, ticker)
+                    if rec:
+                        fact_list.append(rec)
+                    if pri:
+                        fact_list.append(pri)
+                else:
+                    f = facts_mod.query(metric, ticker)
+                    if f:
+                        fact_list.append(f)
+        else:  # single
+            ticker = tickers[0] if tickers else None
+            if not ticker:
+                return None
             if is_yoy:
                 rec, pri = facts_mod.query_yoy(metric, ticker)
                 if rec:
@@ -67,23 +96,20 @@ def xbrl_lookup(question: str, route: dict) -> dict | None:
                 f = facts_mod.query(metric, ticker)
                 if f:
                     fact_list.append(f)
-    else:  # single
-        ticker = tickers[0] if tickers else None
-        if not ticker:
-            return None
-        if is_yoy:
-            rec, pri = facts_mod.query_yoy(metric, ticker)
-            if rec:
-                fact_list.append(rec)
-            if pri:
-                fact_list.append(pri)
-        else:
-            f = facts_mod.query(metric, ticker)
-            if f:
-                fact_list.append(f)
 
-    if not fact_list:
+    # Deduplicate: same (ticker, concept, label) can appear across metrics.
+    seen: set[tuple] = set()
+    unique_facts: list[dict] = []
+    for f in fact_list:
+        key = (f["ticker"], f["concept"], f["label"])
+        if key not in seen:
+            seen.add(key)
+            unique_facts.append(f)
+
+    if not unique_facts:
         return None
+
+    fact_list = unique_facts
 
     _, synthetic_chunks = synthesize.build_xbrl_context(fact_list)
     return {
