@@ -61,7 +61,7 @@ Two refusal mechanisms: a **retrieval threshold** (out-of-corpus, e.g. "Tesla's 
 - **Routing — why.** Regex/alias map, no LLM, for determinism + explainability; the tradeoff is
   brittleness on unlisted aliases/phrasing.
 
-**Where it breaks (honest).** Q21 in the eval is the deliberate failure: asking for NVIDIA's
+**Where it breaks (honest).** Q24 in the eval is the deliberate failure: asking for NVIDIA's
 *Data Center segment* revenue causes the XBRL fast path to intercept (keyword `revenue` matches)
 and return a synthetic chunk with the *consolidated* total ($215,938M). The segment bail-out is
 a hardcoded allowlist (`Sam's Club`, `Financial Products`, `ME&T`) that doesn't know "Data
@@ -142,7 +142,7 @@ python eval/run_eval.py        # -> eval/results.md (table + answers, with blank
 ```
 
 `results.md` records each question's route, refusal, top similarity, citations, and gaps; you
-fill in correct / grounded / refusal-correct by hand. Q21 is the deliberate failure probe — it
+fill in correct / grounded / refusal-correct by hand. Q24 is the deliberate failure probe — it
 is expected to produce `correct=no`.
 
 ## Configuration
