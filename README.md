@@ -28,8 +28,11 @@ cash flow), the fact is returned directly — no retrieval, no decompose LLM cal
 on a miss. Facts are formatted as synthetic chunks with the same schema as RAG chunks, so the
 synthesis and citation logic is completely unchanged.
 
-Two refusal mechanisms: a **retrieval threshold** (out-of-corpus, e.g. "Tesla's revenue") and a
-**synthesis/gaps gate** (in-corpus but undisclosed, e.g. "Coca-Cola's attrition rate").
+Three refusal mechanisms: a **retrieval threshold** (out-of-corpus, e.g. "Tesla's revenue"), a
+**synthesis/gaps gate** (in-corpus but undisclosed, e.g. "Coca-Cola's attrition rate"), and a
+**synthesis-level OOS guard** (the system prompt explicitly declines for any company not among the
+six — a safety net for edge cases where the cosine similarity lands exactly at the threshold and
+the gate doesn't fire, as in Q17/Amazon at 0.500).
 
 ## Decision log (one page)
 
@@ -54,12 +57,21 @@ Two refusal mechanisms: a **retrieval threshold** (out-of-corpus, e.g. "Tesla's 
   at query time and eliminates retrieval misses for the most common numeric questions. Per-ticker
   concept overrides handle terminology differences (Apple uses
   `RevenueFromContractWithCustomerExcludingAssessedTax`; JPMorgan uses
-  `RevenuesNetOfInterestExpense`; Caterpillar's net income lives in `ProfitLoss`).
+  `RevenuesNetOfInterestExpense`; Caterpillar's net income lives in `ProfitLoss`). The lookup
+  also supports **multi-metric questions** (e.g. "R&D vs operating cash flow") by collecting
+  every matching keyword rather than stopping at the first, and **year-over-year deltas** by
+  fetching both the current and prior-year tagged facts when the question contains change/YoY
+  language.
 - **Generation & honesty.** Temp-0 `claude-sonnet-4-6` (Opus 4.8 removed `temperature`). Every
   figure is cited to a chunk id; cross-company answers state each company's fiscal-year end.
-  Two refusal gates as above — refuse rather than guess.
+  Three refusal gates as above — refuse rather than guess. The synthesis prompt also suppresses
+  describing which in-corpus companies appeared in the context when the question asks about an
+  out-of-corpus entity, preventing confusing responses like "Walmart and NVIDIA are in the
+  context but Amazon is not."
 - **Routing — why.** Regex/alias map, no LLM, for determinism + explainability; the tradeoff is
-  brittleness on unlisted aliases/phrasing.
+  brittleness on unlisted aliases/phrasing. The superlative regex uses a negative lookahead
+  (`most(?!\s+recent)`) so "most recent fiscal year" doesn't spuriously fan-out to all six
+  companies instead of routing to the correct single-company or OOS path.
 
 **Where it breaks (honest).** Q24 in the eval is the deliberate failure: asking for NVIDIA's
 *Data Center segment* revenue causes the XBRL fast path to intercept (keyword `revenue` matches)
@@ -67,8 +79,12 @@ and return a synthetic chunk with the *consolidated* total ($215,938M). The segm
 a hardcoded allowlist (`Sam's Club`, `Financial Products`, `ME&T`) that doesn't know "Data
 Center." Claude correctly says "segment not found," but the actual figure — which IS in Item 8's
 segment notes — is never retrieved because RAG was bypassed. The in/out-of-corpus threshold
-margin is thin (~0.003 on one probe; Q17/Amazon sits at exactly 0.500). Footnote linkage is
-local, not a global reference graph.
+margin is thin (~0.003 on one probe); Q17/Amazon lands at exactly 0.500 — the strict `<`
+comparison means the threshold gate doesn't fire, but the synthesis-level OOS guard handles
+it cleanly (Claude declines rather than leaking context from unrelated Walmart/NVIDIA chunks).
+Footnote linkage is local, not a global reference graph. Multi-statement questions that mix
+balance-sheet and cash-flow line items not in XBRL (e.g. Q21: Apple capex + total assets)
+rely on RAG alone and may retrieve the right chunk without extracting both figures cleanly.
 
 **Next steps.** Two approaches to fix the segment bypass: (1) a compound-noun heuristic that
 detects a Title-Cased phrase between the company name and the metric keyword, indicating a
