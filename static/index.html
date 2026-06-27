@@ -3,12 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>10-K Q&A</title>
+<title>Financial Analysis Agent</title>
 <style>
   :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-  body { max-width: 760px; margin: 40px auto; padding: 0 16px; color: #1a1a1a; line-height: 1.5; }
+  body { max-width: 960px; margin: 40px auto; padding: 0 16px; color: #1a1a1a; line-height: 1.5; }
   h1 { font-size: 1.25rem; }
   .sub { color: #666; font-size: .85rem; margin-top: -8px; }
+  .disclaimer { color: #6b7280; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 12px; font-size: .82rem; }
+  #chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .chip { background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; border-radius: 999px; padding: 5px 10px; cursor: pointer; font-size: .82rem; }
   form { display: flex; gap: 8px; margin: 20px 0; }
   input { flex: 1; padding: 10px 12px; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; }
   button { padding: 10px 16px; font-size: 1rem; border: 0; border-radius: 6px; background: #1a56db; color: #fff; cursor: pointer; }
@@ -17,6 +20,8 @@
   #clear:hover { background: #e5e7eb; }
   #answer { white-space: pre-wrap; background: #f7f7f8; border: 1px solid #eee; border-radius: 8px; padding: 16px; min-height: 24px; }
   #gaps { color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 8px 12px; margin-top: 12px; display: none; }
+  #quotes { color: #065f46; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; padding: 8px 12px; margin-top: 12px; display: none; font-size: .86rem; }
+  #trace { color: #374151; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 12px; margin-top: 12px; display: none; font-size: .86rem; }
   h2 { font-size: .95rem; margin: 22px 0 8px; color: #444; }
   details { border: 1px solid #e5e5e5; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; }
   summary { cursor: pointer; font-weight: 600; font-size: .9rem; }
@@ -25,8 +30,14 @@
 </style>
 </head>
 <body>
-  <h1>Grounded Q&amp;A over six SEC 10-K filings</h1>
-  <p class="sub">Apple · JPMorgan Chase · Walmart · Coca-Cola · NVIDIA · Caterpillar</p>
+  <h1>Financial Analysis Agent</h1>
+  <p class="sub">Filings RAG · XBRL facts · market quotes for Apple, JPMorgan Chase, Walmart, Coca-Cola, NVIDIA, and Caterpillar</p>
+  <p class="disclaimer">Research support only. Market data may be delayed and answers are not investment advice.</p>
+  <div id="chips">
+    <button class="chip" data-q="What is NVIDIA's current stock price and latest reported revenue?">NVDA price + revenue</button>
+    <button class="chip" data-q="Compare Apple's current market cap to its latest reported revenue.">AAPL market cap vs revenue</button>
+    <button class="chip" data-q="What cybersecurity risks did Walmart disclose?">WMT risk factors</button>
+  </div>
 
   <form id="form">
     <input id="q" placeholder="e.g. What was NVIDIA's total revenue?" autocomplete="off" autofocus>
@@ -36,6 +47,8 @@
 
   <div id="answer"></div>
   <div id="gaps"></div>
+  <div id="quotes"></div>
+  <div id="trace"></div>
   <div id="citations"></div>
 
 <script>
@@ -45,6 +58,8 @@ const askBtn = document.getElementById("ask");
 const clearBtn = document.getElementById("clear");
 const answerEl = document.getElementById("answer");
 const gapsEl = document.getElementById("gaps");
+const quotesEl = document.getElementById("quotes");
+const traceEl = document.getElementById("trace");
 const citesEl = document.getElementById("citations");
 let es = null;
 
@@ -54,6 +69,10 @@ clearBtn.addEventListener("click", () => {
   answerEl.textContent = "";
   citesEl.innerHTML = "";
   gapsEl.style.display = "none";
+  quotesEl.style.display = "none";
+  quotesEl.textContent = "";
+  traceEl.style.display = "none";
+  traceEl.textContent = "";
   askBtn.disabled = false;
   qInput.focus();
 });
@@ -67,6 +86,10 @@ form.addEventListener("submit", (e) => {
   answerEl.textContent = "";
   citesEl.innerHTML = "";
   gapsEl.style.display = "none";
+  quotesEl.style.display = "none";
+  quotesEl.textContent = "";
+  traceEl.style.display = "none";
+  traceEl.textContent = "";
   askBtn.disabled = true;
 
   es = new EventSource("/api/stream?q=" + encodeURIComponent(q));
@@ -80,6 +103,17 @@ form.addEventListener("submit", (e) => {
     if (data.gaps && data.gaps.length) {
       gapsEl.textContent = "Not found in the filings for: " + data.gaps.join(", ");
       gapsEl.style.display = "block";
+    }
+    const marketSources = (data.citations || []).filter((c) => c.chunk_id.includes("-MKT-"));
+    if (marketSources.length) {
+      quotesEl.textContent = marketSources.map((c) => c.text).join(" ");
+      quotesEl.style.display = "block";
+    }
+    if (data.plan || data.tool_calls) {
+      const actions = (data.plan?.actions || []).map((a) => a.tool).join(" → ");
+      const tools = (data.tool_calls || []).map((t) => `${t.tool}: ${t.status}`).join(" · ");
+      traceEl.textContent = "Plan: " + (actions || "n/a") + (tools ? " | Tools: " + tools : "");
+      traceEl.style.display = "block";
     }
     if (data.citations && data.citations.length) {
       citesEl.innerHTML = "<h2>Sources</h2>";
@@ -99,6 +133,13 @@ form.addEventListener("submit", (e) => {
   });
 
   es.onerror = () => { askBtn.disabled = false; if (es) es.close(); };
+});
+
+document.querySelectorAll(".chip").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    qInput.value = chip.dataset.q;
+    form.requestSubmit();
+  });
 });
 </script>
 </body>

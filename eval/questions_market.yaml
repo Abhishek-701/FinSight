@@ -1,0 +1,7 @@
+- question: "What is NVIDIA's current stock price?"
+  category: market
+  note: "Expected to select market_quote, include a market citation, and state an as-of timestamp."
+
+- question: "What is Apple's current market cap?"
+  category: market
+  note: "Expected to select market_quote and include market data freshness language."

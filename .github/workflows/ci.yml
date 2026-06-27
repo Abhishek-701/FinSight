@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  python-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Compile source
+        run: python -m compileall app eval
+      - name: No-LLM smoke test
+        run: |
+          python - <<'PY'
+          from app import research
+          res = research.run("What was total revenue last year?")
+          assert res["refused"] is True
+          assert res["refusal_reason"] == "clarify"
+          assert res.get("plan")
+          assert res.get("tool_calls")
+          PY

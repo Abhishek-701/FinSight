@@ -1,10 +1,14 @@
-"""Phase 3 — central config. All tunables live here (G7: non-obvious values logged in DECISIONS.md)."""
+"""Central config. All tunables live here (G7: non-obvious values logged in DECISIONS.md)."""
 
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()  # load OPENAI_API_KEY + ANTHROPIC_API_KEY from .env before any client init
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 # --- Models ---
 EMBED_MODEL = "text-embedding-3-small"   # OpenAI; Anthropic has no embeddings API
@@ -36,11 +40,30 @@ RERANK_POOL = 30          # fuse this many candidates, rerank them, then take to
 # --- Decomposition ---
 FANOUT_CAP = 12           # max sub-queries; beyond this, answer primary metric + state what was dropped
 
+# --- Agent/tool execution ---
+AGENT_MAX_STEPS = 8
+
+# --- Market data ---
+MARKET_PROVIDER = "yfinance"
+MARKET_CACHE_TTL_SECONDS = 60
+MARKET_HISTORY_CACHE_TTL_SECONDS = 300
+MARKET_HISTORY_ROWS = 8
+MARKET_INTENT_RE = (
+    r"\b(stock price|share price|current price|quote|trading|market cap|market capitalization|"
+    r"last close|previous close|52.week|pe ratio|p/e|price)\b"
+)
+MARKET_DISCLAIMER = "Market data is provided by yfinance and may be delayed; not investment advice."
+
+# --- API / production controls ---
+API_KEY = os.getenv("FAIRWAY_API_KEY", "")
+RATE_LIMIT_PER_MINUTE = int(os.getenv("FAIRWAY_RATE_LIMIT_PER_MINUTE", "60"))
+
 # --- Storage ---
 _ROOT = Path(__file__).resolve().parent.parent
 CHUNKS_PATH = _ROOT / "data" / "chunks.json"
 CHROMA_DIR = str(_ROOT / "data" / "chroma")
 COLLECTION = "filings"
+SESSION_DB_PATH = _ROOT / "data" / "sessions.sqlite3"
 
 # --- XBRL fact store ---
 FACTS_PATH = _ROOT / "data" / "facts.json"

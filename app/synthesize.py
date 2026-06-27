@@ -13,11 +13,13 @@ from app import config
 _client = anthropic.Anthropic()
 
 SYSTEM = (
-    "You answer questions about six companies strictly from the provided 10-K excerpts.\n"
+    "You answer questions about six companies strictly from the provided evidence.\n"
     "The six companies are: Apple, JPMorgan Chase, Walmart, Coca-Cola, NVIDIA, and Caterpillar.\n"
     "Rules:\n"
     "- Use ONLY the provided context. Never use outside knowledge or guess a number.\n"
-    "- Cite every figure inline with its chunk id in square brackets, e.g. [NVDA-0062].\n"
+    "- Cite every figure inline with its chunk id in square brackets, e.g. [NVDA-0062] or [NVDA-MKT-...].\n"
+    "- Treat SEC filings as historical/as-reported and market data as live or delayed as-of the quoted timestamp.\n"
+    "- When using market data, state the as-of time and say it may be delayed and is not investment advice.\n"
     "- If the question is about a company other than the six listed above, say: "
     "'<Company> is not among the six companies I cover (Apple, JPMorgan Chase, Walmart, "
     "Coca-Cola, NVIDIA, Caterpillar). I cannot answer questions about it.' "
@@ -36,7 +38,8 @@ SYSTEM = (
 def build_context(chunks: list[dict]) -> str:
     blocks = []
     for c in chunks:
-        hdr = f"[{c['chunk_id']}] {c['company']} — {c.get('section_title') or c.get('item') or ''} (filed {c['filing_date']})"
+        label = "as of" if c.get("kind") == "market" else "filed"
+        hdr = f"[{c['chunk_id']}] {c['company']} — {c.get('section_title') or c.get('item') or ''} ({label} {c['filing_date']})"
         blocks.append(hdr + "\n" + c["text"])
     return "\n\n".join(blocks)
 

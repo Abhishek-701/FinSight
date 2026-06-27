@@ -11,3 +11,5 @@ python-dotenv==1.0.1     # load .env
 pyyaml==6.0.2            # eval/questions.yaml
 tiktoken==0.8.0          # token counting for ~800-token chunking
 sentence-transformers==5.5.1  # Phase 5 cross-encoder reranker (pulls torch); toggleable via config.USE_RERANKER
+yfinance==1.4.1           # free/delayed market data provider for quote/history tools
+cachetools==7.1.1         # small TTL cache for market data responses

@@ -1,0 +1,7 @@
+- question: "What is NVIDIA's current stock price and latest reported revenue?"
+  category: hybrid
+  note: "Expected to use both market_quote and facts_lookup, with market and filing citations."
+
+- question: "Compare Apple's current market cap to its latest reported revenue."
+  category: hybrid
+  note: "Expected to combine market data and XBRL revenue, explicitly separating quote as-of time from filing period."
