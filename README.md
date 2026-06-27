@@ -5,9 +5,6 @@ Walmart, Coca-Cola, NVIDIA, and Caterpillar**. It answers questions with figures
 exact passage they came from, and refuses (rather than guessing) when the answer isn't in the
 six filings.
 
-The design rationale, tradeoffs, and known weaknesses live in **[DECISIONS.md](DECISIONS.md)** —
-read that for the "why". This file is the "how to run it".
-
 ## Pipeline (not an agent)
 
 ```
@@ -34,68 +31,10 @@ Three refusal mechanisms: a **retrieval threshold** (out-of-corpus, e.g. "Tesla'
 six — a safety net for edge cases where the cosine similarity lands exactly at the threshold and
 the gate doesn't fire, as in Q17/Amazon at 0.500).
 
-## Decision log (one page)
-
-*Filings used:* the six most recent 10-Ks from EDGAR; exact accession numbers + filing dates in
-[`data/manifest.json`](data/manifest.json) and DECISIONS.md.
-
-- **Chunking — why.** ~800-token prose windows (100 overlap), flushed at Item boundaries so a
-  chunk never straddles Items. Tables are kept whole and serialized **row-wise**, where each value
-  carries its compound column header, a `Consolidated` / `Segment-level` **scope tag**, and the
-  table caption — so a number can't drift from its year/scope, and a table is retrievable by its
-  description, not just its Item heading. (~2,440 chunks.)
-- **Embeddings — why.** OpenAI `text-embedding-3-small`: Anthropic has no embeddings API; it's
-  cheap and strong for dense retrieval.
-- **Retrieval — why.** Hybrid **BM25 + dense, fused with RRF**, company-filtered. Lexical catches
-  exact line-item terms, dense catches paraphrase, and RRF needs no cross-scorer calibration.
-- **Reranker — why + toggle.** Optional cross-encoder (`ms-marco-MiniLM-L-6-v2`) over the top-30,
-  `USE_RERANKER` in config. Surfaces a buried table row above prose; pulls `torch`, so it's
-  toggleable.
-- **XBRL fast path — why.** Inline XBRL tags in the 10-K HTML are the authoritative numeric
-  source — tagged by the company itself, machine-readable, unambiguous about period and
-  consolidation scope. Parsing them with BeautifulSoup (an existing dependency) costs nothing
-  at query time and eliminates retrieval misses for the most common numeric questions. Per-ticker
-  concept overrides handle terminology differences (Apple uses
-  `RevenueFromContractWithCustomerExcludingAssessedTax`; JPMorgan uses
-  `RevenuesNetOfInterestExpense`; Caterpillar's net income lives in `ProfitLoss`). The lookup
-  also supports **multi-metric questions** (e.g. "R&D vs operating cash flow") by collecting
-  every matching keyword rather than stopping at the first, and **year-over-year deltas** by
-  fetching both the current and prior-year tagged facts when the question contains change/YoY
-  language.
-- **Generation & honesty.** Temp-0 `claude-sonnet-4-6` (Opus 4.8 removed `temperature`). Every
-  figure is cited to a chunk id; cross-company answers state each company's fiscal-year end.
-  Three refusal gates as above — refuse rather than guess. The synthesis prompt also suppresses
-  describing which in-corpus companies appeared in the context when the question asks about an
-  out-of-corpus entity, preventing confusing responses like "Walmart and NVIDIA are in the
-  context but Amazon is not."
-- **Routing — why.** Regex/alias map, no LLM, for determinism + explainability; the tradeoff is
-  brittleness on unlisted aliases/phrasing. The superlative regex uses a negative lookahead
-  (`most(?!\s+recent)`) so "most recent fiscal year" doesn't spuriously fan-out to all six
-  companies instead of routing to the correct single-company or OOS path.
-
-**Where it breaks (honest).** Q24 in the eval is the deliberate failure: asking for NVIDIA's
-*Data Center segment* revenue causes the XBRL fast path to intercept (keyword `revenue` matches)
-and return a synthetic chunk with the *consolidated* total ($215,938M). The segment bail-out is
-a hardcoded allowlist (`Sam's Club`, `Financial Products`, `ME&T`) that doesn't know "Data
-Center." Claude correctly says "segment not found," but the actual figure — which IS in Item 8's
-segment notes — is never retrieved because RAG was bypassed. The in/out-of-corpus threshold
-margin is thin (~0.003 on one probe); Q17/Amazon lands at exactly 0.500 — the strict `<`
-comparison means the threshold gate doesn't fire, but the synthesis-level OOS guard handles
-it cleanly (Claude declines rather than leaking context from unrelated Walmart/NVIDIA chunks).
-Footnote linkage is local, not a global reference graph. Multi-statement questions that mix
-balance-sheet and cash-flow line items not in XBRL (e.g. Q21: Apple capex + total assets)
-rely on RAG alone and may retrieve the right chunk without extracting both figures cleanly.
-
-**Next steps.** Two approaches to fix the segment bypass: (1) a compound-noun heuristic that
-detects a Title-Cased phrase between the company name and the metric keyword, indicating a
-division name; (2) a temp-0 Haiku classifier (`CONSOLIDATED` vs `SEGMENT`, ~$0.0001/call).
-The heuristic covers ~80% of cases for free; the classifier is general but adds latency + API
-dependency. Full detail in [DECISIONS.md](DECISIONS.md).
-
 ## Prerequisites
 
 - **Python 3.11+** (developed on 3.13). Git.
-- **Two API keys** (see why in DECISIONS.md):
+- **Two API keys**:
   - `OPENAI_API_KEY` — embeddings only (`text-embedding-3-small`). Anthropic has no embeddings API.
   - `ANTHROPIC_API_KEY` — the chat model (`claude-sonnet-4-6`) for decomposition + synthesis.
 - Ingest cost is tiny: embedding the whole corpus is well under $0.05; each question is a
@@ -117,7 +56,7 @@ cp .env.example .env          # then edit .env and fill in both keys
 ```
 
 > The reranker pulls `sentence-transformers` + `torch` (a large download). It's optional — set
-> `USE_RERANKER = False` in `app/config.py` to skip the model load. See DECISIONS.md.
+> `USE_RERANKER = False` in `app/config.py` to skip the model load.
 
 ## Ingest (run once; outputs are cached and reproducible)
 
@@ -177,7 +116,6 @@ app/      main.py (FastAPI + pipeline, xbrl_lookup fast path)
           synthesize.py (build_xbrl_context)  rerank.py  config.py  __init__.py
 eval/     questions.yaml  run_eval.py  results.md
 static/   index.html
-DECISIONS.md   running decision log + known weaknesses + next-step list
 data/     raw/  parsed/  chunks.json  facts.json  chroma/  manifest.json
           (all gitignored except manifest.json; facts.json regenerated by ingest/xbrl.py)
 ```
