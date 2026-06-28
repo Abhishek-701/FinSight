@@ -64,8 +64,8 @@ MARKET_INTENT_RE = (
 MARKET_DISCLAIMER = "Market data is provided by yfinance and may be delayed; not investment advice."
 
 # --- API / production controls ---
-API_KEY = os.getenv("FAIRWAY_API_KEY", "")
-RATE_LIMIT_PER_MINUTE = int(os.getenv("FAIRWAY_RATE_LIMIT_PER_MINUTE", "60"))
+API_KEY = os.getenv("FINSIGHT_API_KEY", "")
+RATE_LIMIT_PER_MINUTE = int(os.getenv("FINSIGHT_RATE_LIMIT_PER_MINUTE", "60"))
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 REDIS_URL = os.getenv("REDIS_URL", "")
 
