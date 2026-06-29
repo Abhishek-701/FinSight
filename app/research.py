@@ -40,6 +40,20 @@ _SUMMARY_INTENT_RE = re.compile(
     re.I,
 )
 
+# When any of these topic words appear alongside a summary-intent phrase, the question
+# is about ONE specific aspect of the company, not the company broadly. These questions
+# belong in focused RAG, not the 4-topic full-company summary path.
+# Patterns ending in \w* absorb plurals and derivations (risk→risks, strateg→strategy/strategies,
+# competit→competition/competitive, operat→operations/operational, regulat→regulation/regulatory).
+_SPECIFIC_TOPIC_RE = re.compile(
+    r"\b(risks?\b|strateg\w+|income|profit|segment\w*|products?|services?|"
+    r"competit\w+|debt|equity|employ\w+|headcount|guidance|"
+    r"cash\s+flow|earnings|growth|forecast|valuation|"
+    r"balance\s+sheet|operat\w+|market\s+share|dividend\w*|capex|margin|"
+    r"eps|litigation|regulat\w+|compliance|supply\s+chain|workforce)",
+    re.I,
+)
+
 # Fixed (suffix, title) pairs for per-topic synthesis on broad summary questions.
 # Each topic gets its own retrieval call and its own 600-token synthesis call.
 # The model never sees more than one topic's chunks at once, preventing the
@@ -85,14 +99,16 @@ def _compound_parts(question: str) -> list[str]:
 
 
 def _is_summary_question(question: str, route: dict) -> bool:
-    """True when the question is a broad summary of a single known company.
+    """True when the question asks for a broad overview of a single company as a whole.
 
-    Summary questions trigger per-topic synthesis so the model writes focused
-    prose for each topic in isolation rather than planning a skeleton it cannot
-    fill within the synthesis token budget.
+    The 4-topic summary path (Business Overview / Financial Performance / Key Risks /
+    Strategy & Outlook) is only correct when the user wants everything about a company,
+    not when they ask about one specific aspect. _SPECIFIC_TOPIC_RE guards against
+    "tell me about key risks" or "describe the strategy" triggering the full summary.
     """
     return (
         bool(_SUMMARY_INTENT_RE.search(question))
+        and not bool(_SPECIFIC_TOPIC_RE.search(question))
         and route.get("mode") == "single"
         and not re.search(config.COMPUTE_INTENT_RE, question, re.I)
         and not detect_xbrl_metrics(question)
@@ -101,12 +117,8 @@ def _is_summary_question(question: str, route: dict) -> bool:
 
 
 def _single_company_subs(question: str, ticker: str) -> list[dict]:
-    # Broad summary/overview questions: _is_summary_question detects these and
-    # routes to _run_summary before this function is called. The expansion below
-    # is kept as a fallback for cases where the summary path is bypassed.
-    if _SUMMARY_INTENT_RE.search(question) and not re.search(config.COMPUTE_INTENT_RE, question, re.I):
-        company = _company_name(ticker)
-        return [{"ticker": ticker, "query": f"{company} {suffix}"} for suffix, _ in _SUMMARY_TOPICS]
+    # Broad summary questions are handled by _run_summary before this is called.
+    # This function only needs to handle compound questions and single-query cases.
     parts = _compound_parts(question)
     if len(parts) <= 1:
         return [{"ticker": ticker, "query": question}]
