@@ -129,3 +129,34 @@ def stream_answer(question: str, chunks: list[dict]):
     ) as stream:
         for text in stream.text_stream:
             yield text
+
+
+def stream_section(query: str, chunks: list[dict]):
+    """Yield prose tokens for one sub-query topic.
+
+    Called once per topic in the per-topic summary path. The model only sees
+    one topic's chunks, so it writes focused prose instead of planning a
+    multi-section skeleton it can't fill within the token budget.
+    """
+    context = build_context(chunks)
+    user = (
+        f"Context:\n{context}\n\n"
+        f"Topic: {query}\n\n"
+        "Write 3-5 sentences of focused prose for this specific topic only. "
+        "No headings, no bullet points, no section markers. "
+        "Cite every figure inline with its chunk id in square brackets."
+    )
+    with _client.messages.stream(
+        model=config.CHAT_MODEL,
+        max_tokens=600,
+        temperature=config.TEMPERATURE,
+        system=SYSTEM,
+        messages=[{"role": "user", "content": user}],
+    ) as stream:
+        for text in stream.text_stream:
+            yield text
+
+
+def synthesize_section(query: str, chunks: list[dict]) -> str:
+    """Synchronous wrapper around stream_section."""
+    return "".join(stream_section(query, chunks))

@@ -40,14 +40,15 @@ _SUMMARY_INTENT_RE = re.compile(
     re.I,
 )
 
-# Fixed sub-queries used when a broad summary question is detected. Each targets
-# a different part of the 10-K so retrieval returns topically diverse chunks
-# instead of a scattered grab from a single vague query.
-_SUMMARY_TOPICS = [
-    "business overview main products services operating segments",
-    "revenue operating income net income financial performance results",
-    "key risk factors business operational and regulatory risks",
-    "strategy competitive position growth initiatives outlook",
+# Fixed (suffix, title) pairs for per-topic synthesis on broad summary questions.
+# Each topic gets its own retrieval call and its own 600-token synthesis call.
+# The model never sees more than one topic's chunks at once, preventing the
+# multi-section skeleton it generates when all 24 chunks arrive together.
+_SUMMARY_TOPICS: list[tuple[str, str]] = [
+    ("business overview main products services operating segments", "Business Overview"),
+    ("revenue operating income net income financial performance results", "Financial Performance"),
+    ("key risk factors business operational and regulatory risks", "Key Risks"),
+    ("strategy competitive position growth initiatives outlook", "Strategy & Outlook"),
 ]
 
 
@@ -83,14 +84,29 @@ def _compound_parts(question: str) -> list[str]:
     return [p for p in parts if len(p.split()) >= 3]
 
 
+def _is_summary_question(question: str, route: dict) -> bool:
+    """True when the question is a broad summary of a single known company.
+
+    Summary questions trigger per-topic synthesis so the model writes focused
+    prose for each topic in isolation rather than planning a skeleton it cannot
+    fill within the synthesis token budget.
+    """
+    return (
+        bool(_SUMMARY_INTENT_RE.search(question))
+        and route.get("mode") == "single"
+        and not re.search(config.COMPUTE_INTENT_RE, question, re.I)
+        and not detect_xbrl_metrics(question)
+        and bool(route.get("tickers"))
+    )
+
+
 def _single_company_subs(question: str, ticker: str) -> list[dict]:
-    # Broad summary/overview questions: expand into focused topic sub-queries so
-    # each retrieval call returns targeted chunks rather than a scattered grab from
-    # one vague query. Without this the model gets thin, mixed context and fills
-    # the gap by generating an empty section outline.
+    # Broad summary/overview questions: _is_summary_question detects these and
+    # routes to _run_summary before this function is called. The expansion below
+    # is kept as a fallback for cases where the summary path is bypassed.
     if _SUMMARY_INTENT_RE.search(question) and not re.search(config.COMPUTE_INTENT_RE, question, re.I):
         company = _company_name(ticker)
-        return [{"ticker": ticker, "query": f"{company} {topic}"} for topic in _SUMMARY_TOPICS]
+        return [{"ticker": ticker, "query": f"{company} {suffix}"} for suffix, _ in _SUMMARY_TOPICS]
     parts = _compound_parts(question)
     if len(parts) <= 1:
         return [{"ticker": ticker, "query": question}]
@@ -290,6 +306,86 @@ def _prepare_with_tools(question: str, route: dict, research_plan: dict) -> tupl
     return _merge_evidence(meta, evidence), tool_calls
 
 
+def _run_summary(question: str, ticker: str, route: dict, started: float) -> dict:
+    """Per-topic retrieve-and-synthesize for broad summary questions.
+
+    Iterates _SUMMARY_TOPICS. For each topic:
+      1. Retrieve TOP_K_SUB chunks scoped to this ticker.
+      2. If the top chunk scores below the threshold, skip the topic.
+      3. Call synthesize_section (600 tokens max) — the model only sees one
+         topic's chunks, so it writes prose, not a section skeleton.
+      4. Prefix the paragraph with a ### heading and accumulate.
+
+    The structure (headings, order) is fixed here in code. The model is only
+    ever asked to write prose; it never sees the full 24-chunk context at once.
+    """
+    company = _company_name(ticker)
+    all_chunks: dict[str, dict] = {}
+    all_cited: set[str] = set()
+    retrieval_log: list[dict] = []
+    tool_calls: list[dict] = []
+    sections: list[str] = []
+
+    for suffix, title in _SUMMARY_TOPICS:
+        query = f"{company} {suffix}"
+        res = retrieve.retrieve(query, [ticker], config.TOP_K_SUB)
+        retrieval_log.append({
+            "ticker": ticker, "query": query,
+            "top_sim": round(res["top_sim"], 3),
+            "chunk_ids": [c["chunk_id"] for c in res["chunks"]],
+        })
+        if res["top_sim"] < config.DENSE_SIM_THRESHOLD:
+            continue
+        chunks = res["chunks"]
+        for chunk in chunks:
+            all_chunks[chunk["chunk_id"]] = chunk
+
+        synth_t0 = time.perf_counter()
+        paragraph = synthesize.synthesize_section(query, chunks)
+        elapsed_synth = _elapsed(synth_t0)
+
+        if paragraph.strip():
+            cited_here = set(CITATION_RE.findall(paragraph))
+            all_cited.update(cited_here)
+            sections.append(f"### {title}\n{paragraph}")
+            tool_calls.append({
+                "tool": "synthesize_section", "topic": title, "status": "ok",
+                "citations": sorted(cited_here), "elapsed_ms": elapsed_synth,
+            })
+
+    if not sections:
+        meta = {"route": route, "sub_queries": [], "retrieval": retrieval_log, "xbrl_hit": False}
+        return {
+            **_refusal("threshold",
+                       "I couldn't find enough information in the filings to summarize.",
+                       meta),
+            "plan": {}, "tool_calls": tool_calls, "elapsed_ms": _elapsed(started),
+        }
+
+    answer = f"## {company}\n\n" + "\n\n".join(sections)
+    cited = sorted(all_cited)
+    context_chunks = list(all_chunks.values())
+    sub_queries = [{"ticker": ticker, "query": f"{company} {s}"} for s, _ in _SUMMARY_TOPICS]
+    reflection = reflect({"route": route}, answer)
+
+    return {
+        "route": route,
+        "sub_queries": sub_queries,
+        "retrieval": retrieval_log,
+        "context_chunks": context_chunks,
+        "refused": False,
+        "xbrl_hit": False,
+        "answer": answer,
+        "citations": cited,
+        "citation_details": _citation_payload(cited, context_chunks),
+        "gaps": reflection["gaps"],
+        "reflection": reflection,
+        "plan": {"strategy": "per_topic_summary", "topics": [t for _, t in _SUMMARY_TOPICS]},
+        "tool_calls": tool_calls,
+        "elapsed_ms": _elapsed(started),
+    }
+
+
 def finalize(question: str, meta: dict) -> dict:
     """Shared tail: synthesize, extract citations, and attach reflection metadata."""
     text = "".join(synthesize.stream_answer(question, meta["context_chunks"]))
@@ -311,6 +407,13 @@ def run(question: str, conversation_context: ConversationContext | None = None) 
     started = time.perf_counter()
     working_question, context_meta = contextualize_question(question, conversation_context)
     route = router.route(working_question)
+
+    if _is_summary_question(working_question, route):
+        result = _run_summary(working_question, route["tickers"][0], route, started)
+        return {**result, "question": question,
+                "contextualized_question": working_question,
+                "conversation_context": context_meta}
+
     research_plan = plan(working_question, route)
     meta, tool_calls = _prepare_with_tools(working_question, route, research_plan)
 
@@ -350,6 +453,76 @@ def stream_events(question: str, conversation_context: ConversationContext | Non
     started = time.perf_counter()
     working_question, context_meta = contextualize_question(question, conversation_context)
     route = router.route(working_question)
+
+    if _is_summary_question(working_question, route):
+        ticker = route["tickers"][0]
+        company = _company_name(ticker)
+        all_chunks: dict[str, dict] = {}
+        all_cited: set[str] = set()
+        retrieval_log: list[dict] = []
+        tool_calls: list[dict] = []
+        acc: list[str] = []
+
+        header = f"## {company}\n\n"
+        yield sse("token", {"text": header})
+        acc.append(header)
+
+        for suffix, title in _SUMMARY_TOPICS:
+            query = f"{company} {suffix}"
+            res = retrieve.retrieve(query, [ticker], config.TOP_K_SUB)
+            retrieval_log.append({
+                "ticker": ticker, "query": query,
+                "top_sim": round(res["top_sim"], 3),
+                "chunk_ids": [c["chunk_id"] for c in res["chunks"]],
+            })
+            if res["top_sim"] < config.DENSE_SIM_THRESHOLD:
+                continue
+            chunks = res["chunks"]
+            for chunk in chunks:
+                all_chunks[chunk["chunk_id"]] = chunk
+
+            section_header = f"### {title}\n"
+            yield sse("token", {"text": section_header})
+            acc.append(section_header)
+
+            synth_t0 = time.perf_counter()
+            para_acc: list[str] = []
+            for token in synthesize.stream_section(query, chunks):
+                acc.append(token)
+                para_acc.append(token)
+                yield sse("token", {"text": token})
+
+            para_text = "".join(para_acc)
+            cited_here = set(CITATION_RE.findall(para_text))
+            all_cited.update(cited_here)
+            tool_calls.append({
+                "tool": "synthesize_section", "topic": title, "status": "ok",
+                "citations": sorted(cited_here), "elapsed_ms": _elapsed(synth_t0),
+            })
+
+            sep = "\n\n"
+            yield sse("token", {"text": sep})
+            acc.append(sep)
+
+        text = "".join(acc)
+        cited = sorted(all_cited)
+        context_chunks = list(all_chunks.values())
+        reflection = reflect({"route": route}, text)
+        citations_payload = _citation_payload(cited, context_chunks)
+        yield sse("done", {
+            "citations": citations_payload,
+            "gaps": reflection["gaps"],
+            "refused": False,
+            "plan": {"strategy": "per_topic_summary", "topics": [t for _, t in _SUMMARY_TOPICS]},
+            "tool_calls": tool_calls,
+            "reflection": reflection,
+            "question": question,
+            "contextualized_question": working_question,
+            "conversation_context": context_meta,
+            "elapsed_ms": _elapsed(started),
+        })
+        return
+
     research_plan = plan(working_question, route)
     meta, tool_calls = _prepare_with_tools(working_question, route, research_plan)
 
