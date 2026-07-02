@@ -40,7 +40,7 @@ DROP_TAGS = ["style", "script", "head", "ix:header", "ix:hidden", "ix:resources"
 HEADING_RE = re.compile(r"^Item\s+(\d+[A-Z]?)\.\s*(.*)", re.I)
 # A number: optional $, digits with thousands separators, optional decimals, optional %.
 NUMBER_RE = re.compile(r"-?\$?\d[\d,]*(?:\.\d+)?%?")
-PAREN_NEG_RE = re.compile(r"^\((\$?[\d,]+(?:\.\d+)?)\)$")  # (1,234) -> negative
+PAREN_NEG_RE = re.compile(r"^\(\s*(\$?[\d,]+(?:\.\d+)?)\s*\)$")  # (1,234) or ( 1,234 ) -> negative
 UNIT_RE = re.compile(r"in (thousands|millions|billions)", re.I)
 FOOTNOTE_START_RE = re.compile(r"^\s*(\(\d+\)|\(\w\)|\*+|†|Note\b|\d+\s)")
 YEAR_RE = re.compile(r"^(19|20)\d{2}$")

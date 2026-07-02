@@ -81,43 +81,59 @@ def _build_context_map(soup: BeautifulSoup) -> dict[str, dict]:
     return result
 
 
-def _annual_context_ids(ctx_map: dict[str, dict]) -> list[str]:
-    """Return up to 3 consolidated annual context ids, most recent first.
+def _annual_context_ids(ctx_map: dict[str, dict]) -> tuple[list[str], list[str]]:
+    """Return (duration_ids, instant_ids) for consolidated annual periods, most-recent first.
 
-    Annual = consolidated + duration type + endDate - startDate >= 350 days.
-    Sorted by endDate descending so [0] is most recent FY, [1] is prior FY.
+    duration_ids — income statement / CFS facts (duration >= 350 days).
+    instant_ids  — balance-sheet facts (instant contexts whose date matches a FY-end date
+                   from the duration set, e.g. us-gaap:Assets, us-gaap:StockholdersEquity).
+    The two lists are parallel: instant_ids[i] corresponds to the same FY as duration_ids[i].
     """
-    candidates = [
-        (cid, info)
-        for cid, info in ctx_map.items()
-        if info.get("consolidated")
-        and info.get("type") == "duration"
+    dur_candidates = [
+        (cid, info) for cid, info in ctx_map.items()
+        if info.get("consolidated") and info.get("type") == "duration"
         and info.get("start") and info.get("end")
         and (info["end"] - info["start"]).days >= _MIN_ANNUAL_DAYS
     ]
-    candidates.sort(key=lambda x: x[1]["end"], reverse=True)
-    return [cid for cid, _ in candidates[:3]]
+    dur_candidates.sort(key=lambda x: x[1]["end"], reverse=True)
+    dur_ids = [cid for cid, _ in dur_candidates[:3]]
+
+    # FY-end dates from the duration contexts (order preserved for label alignment).
+    fy_ends = [ctx_map[cid]["end"] for cid in dur_ids]
+
+    # Consolidated instant contexts keyed by their date.
+    inst_by_date: dict = {}
+    for cid, info in ctx_map.items():
+        if info.get("consolidated") and info.get("type") == "instant" and info.get("instant") in fy_ends:
+            inst_by_date[info["instant"]] = cid  # last writer wins; one per date in practice
+
+    # Align to the same FY order as dur_ids so period labels match.
+    inst_ids = [inst_by_date[d] for d in fy_ends if d in inst_by_date]
+    return dur_ids, inst_ids
 
 
 def _extract_facts(
     soup: BeautifulSoup,
     ticker: str,
     ctx_map: dict[str, dict],
-    annual_ids: list[str],
+    dur_ids: list[str],
+    inst_ids: list[str],
     filing_date: str,
 ) -> list[dict]:
-    """Extract ix:nonFraction facts whose contextRef is a consolidated annual period.
+    """Extract ix:nonFraction facts for consolidated annual periods.
 
-    Returns list of fact dicts. Facts for both annual_recent and annual_prior are
-    included so year-over-year queries (Q4, Q5) can be served from a single lookup.
+    Covers both duration contexts (income statement / CFS) and instant contexts
+    (balance sheet — Assets, Liabilities, StockholdersEquity, etc.).
     """
-    if not annual_ids:
+    if not dur_ids and not inst_ids:
         return []
 
     period_labels = ["annual_recent", "annual_prior", "annual_2prior"]
-    period_label: dict[str, str] = {
-        cid: period_labels[i] for i, cid in enumerate(annual_ids)
-    }
+    period_label: dict[str, str] = {}
+    for i, cid in enumerate(dur_ids):
+        period_label[cid] = period_labels[i]
+    for i, cid in enumerate(inst_ids):
+        period_label[cid] = period_labels[i]
 
     facts: list[dict] = []
     for tag in soup.find_all(re.compile(r"nonfraction", re.I)):
@@ -147,7 +163,12 @@ def _extract_facts(
             continue
 
         ctx_info = ctx_map[ctx_ref]
-        period_end = str(ctx_info["end"]) if ctx_info.get("type") == "duration" else ""
+        if ctx_info.get("type") == "duration":
+            period_end = str(ctx_info["end"])
+        elif ctx_info.get("type") == "instant":
+            period_end = str(ctx_info["instant"])
+        else:
+            period_end = ""
 
         facts.append({
             "ticker": ticker,
@@ -219,15 +240,16 @@ def main() -> None:
         soup = BeautifulSoup(html, "lxml")
 
         ctx_map = _build_context_map(soup)
-        annual_ids = _annual_context_ids(ctx_map)
+        dur_ids, inst_ids = _annual_context_ids(ctx_map)
 
-        print(f"  Consolidated annual contexts ({len(annual_ids)}):")
-        for cid in annual_ids:
+        print(f"  Duration contexts ({len(dur_ids)}):")
+        for cid in dur_ids:
             info = ctx_map[cid]
             print(f"    {cid}: {info.get('start')} to {info.get('end')} "
                   f"({(info['end'] - info['start']).days} days)")
+        print(f"  Balance-sheet instant contexts ({len(inst_ids)}): {inst_ids}")
 
-        facts = _extract_facts(soup, ticker, ctx_map, annual_ids, filing_date)
+        facts = _extract_facts(soup, ticker, ctx_map, dur_ids, inst_ids, filing_date)
         print(f"  Extracted {len(facts)} consolidated annual facts")
         all_facts.extend(facts)
 
