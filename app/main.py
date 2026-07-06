@@ -13,9 +13,10 @@ from collections import defaultdict, deque
 from fastapi import Header, HTTPException, Request
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import audit, config, corpus, research
+from app import audit, config, corpus, research, watchlist
 from app.agent import session
 from app.agent.context import from_history
 from app.tools import market
@@ -31,11 +32,20 @@ log = logging.getLogger("fairway.api")
 INDEX_HTML = config._ROOT / "static" / "index.html"
 _RATE_BUCKETS: dict[str, deque[float]] = defaultdict(deque)
 
+_WEB_ASSETS = config.WEB_DIST / "assets"
+if _WEB_ASSETS.exists():
+    app.mount("/assets", StaticFiles(directory=_WEB_ASSETS), name="web-assets")
+
 
 class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
     stream: bool = False
+
+
+class WatchlistRequest(BaseModel):
+    client_id: str
+    ticker: str
 
 
 def _guard(request: Request, x_api_key: str | None = Header(default=None)) -> None:
@@ -93,7 +103,8 @@ async def request_logging(request: Request, call_next):
 
 @app.get("/")
 def index():
-    return FileResponse(INDEX_HTML)
+    dist_index = config.WEB_DIST / "index.html"
+    return FileResponse(dist_index if dist_index.exists() else INDEX_HTML)
 
 
 @app.get("/api/stream")
@@ -152,6 +163,35 @@ def companies():
     return {"companies": config.COMPANIES}
 
 
+@app.get("/api/watchlist")
+def get_watchlist(client_id: str, request: Request, x_api_key: str | None = Header(default=None)):
+    _guard(request, x_api_key)
+    return {"client_id": client_id, "items": watchlist.items(client_id)}
+
+
+@app.post("/api/watchlist")
+def add_watchlist(req: WatchlistRequest, request: Request, x_api_key: str | None = Header(default=None)):
+    _guard(request, x_api_key)
+    try:
+        items = watchlist.add(req.client_id, req.ticker)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="unsupported_ticker")
+    return {"ok": True, "items": items}
+
+
+@app.delete("/api/watchlist/{ticker}")
+def remove_watchlist(ticker: str, client_id: str, request: Request, x_api_key: str | None = Header(default=None)):
+    _guard(request, x_api_key)
+    return {"ok": True, "items": watchlist.remove(client_id, ticker)}
+
+
+@app.get("/api/quotes")
+def quotes(tickers: str, request: Request, x_api_key: str | None = Header(default=None)):
+    _guard(request, x_api_key)
+    symbols = [t.strip().upper() for t in tickers.split(",") if t.strip()][:10]
+    return {"quotes": [market.market_quote(t) for t in symbols]}
+
+
 @app.get("/api/corpus/status")
 def corpus_status():
     return _corpus_status()
@@ -167,6 +207,7 @@ def health():
         "openai_configured": bool(config.OPENAI_API_KEY) if hasattr(config, "OPENAI_API_KEY") else None,
         "anthropic_configured": bool(config.ANTHROPIC_API_KEY) if hasattr(config, "ANTHROPIC_API_KEY") else None,
         "session_store": session.status(),
+        "watchlist_store": watchlist.status(),
         "audit_log": audit.status(),
         "corpus": _corpus_status(),
         "external_state": {

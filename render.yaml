@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: finsight
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: FINSIGHT_USE_RERANKER
+        value: "0"
+      - key: FINSIGHT_RATE_LIMIT_PER_MINUTE
+        value: "30"

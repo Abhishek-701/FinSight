@@ -33,7 +33,9 @@ DENSE_SIM_THRESHOLD = 0.50
 # --- Reranker (Phase 5, toggleable) ---
 # Cross-encoder rerank of the fused candidate pool. Fixes buried-table-row retrieval (a
 # consolidated total sitting among many numeric rows that prose outranks). Toggle to compare.
-USE_RERANKER = True
+# Off by default in deploy (FINSIGHT_USE_RERANKER=0): sentence-transformers/torch is excluded
+# from requirements-deploy.txt to fit the free-tier 512MB RAM ceiling.
+USE_RERANKER = os.getenv("FINSIGHT_USE_RERANKER", "1") == "1"
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 RERANK_POOL = 30          # fuse this many candidates, rerank them, then take top-k
 
@@ -76,6 +78,7 @@ CHROMA_DIR = str(_ROOT / "data" / "chroma")
 COLLECTION = "filings"
 SESSION_DB_PATH = _ROOT / "data" / "sessions.sqlite3"
 AUDIT_LOG_PATH = _ROOT / "data" / "audit.jsonl"
+WEB_DIST = _ROOT / "static" / "dist"  # built React SPA (Phase 3); falls back to static/index.html
 
 # --- XBRL fact store ---
 FACTS_PATH = _ROOT / "data" / "facts.json"

@@ -2,14 +2,22 @@
 .env
 
 # data (downloaded filings + vector store; reproducible via ingest)
-# Ignore data/ contents (incl. data/raw/) but keep the manifest: small provenance
-# record (accession #s, filing dates). data/* (not data/) so the negation can apply.
+# Ignore data/ contents (incl. data/raw/, data/parsed/) but keep the manifest and the
+# serving artifacts (chunks, facts, chroma vector store) so Docker/Render can build
+# directly from git without re-running ingest or re-embedding at deploy time.
 data/*
 !data/manifest.json
-chroma/
+!data/chunks.json
+!data/facts.json
+!data/chroma/
+!data/chroma/**
 
 # python
 __pycache__/
 *.pyc
 .venv/
 venv/
+
+# frontend
+web/node_modules/
+static/dist/
