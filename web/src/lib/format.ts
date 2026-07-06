@@ -19,3 +19,13 @@ export function titleFromQuestion(q: string): string {
 export function markCitations(text: string): string {
   return text.replace(/\[([A-Z][A-Z0-9_\-.]+)\]/g, '<cite class="citation-badge">$1</cite>')
 }
+
+export function pct(value: number | null | undefined, dp = 1): string | null {
+  if (value === null || value === undefined || Number.isNaN(value)) return null
+  return (value * 100).toFixed(dp) + '%'
+}
+
+export function num(value: number | null | undefined, dp = 2): string | null {
+  if (value === null || value === undefined || Number.isNaN(value)) return null
+  return value.toLocaleString(undefined, { maximumFractionDigits: dp })
+}

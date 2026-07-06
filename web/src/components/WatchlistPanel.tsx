@@ -1,11 +1,14 @@
 import { useWatchlist } from '../hooks/useWatchlist'
 import { useQuotes } from '../hooks/useQuotes'
+import { useHistories } from '../hooks/useHistories'
+import Sparkline from './Sparkline'
 import { money } from '../lib/format'
 
 export default function WatchlistPanel({ companies }: { companies: Record<string, string> }) {
   const { items, add, remove } = useWatchlist()
   const tickers = items.map((i) => i.ticker)
   const quotes = useQuotes(tickers)
+  const { histories } = useHistories(tickers, '1mo')
   const watched = new Set(tickers)
 
   return (
@@ -27,6 +30,7 @@ export default function WatchlistPanel({ companies }: { companies: Record<string
                 <b>{item.ticker}</b>
                 <span>{item.company}</span>
               </div>
+              <Sparkline rows={histories[item.ticker] || []} />
               <div className="watchlist-quote">
                 {quote?.status === 'ok' && data ? (
                   <>

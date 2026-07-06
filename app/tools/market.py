@@ -45,10 +45,13 @@ def build_market_chunk(ticker: str, data: dict[str, Any], kind: str = "quote") -
     chunk_id = f"{ticker.upper()}-MKT-{stamp}"
     company = _company(ticker)
     if kind == "history":
+        # Full rows live in data (for REST callers/charts); the evidence TEXT the LLM sees
+        # is capped to the tail so long periods (6mo/1y) don't bloat synthesis context.
+        recent_rows = data.get("rows", [])[-config.MARKET_HISTORY_ROWS:]
         text = (
             f"[{company}] Market history from {data.get('source', config.MARKET_PROVIDER)} "
             f"as of {as_of}. Period: {data.get('period')}. "
-            f"Rows: {data.get('rows', [])}. This data may be delayed."
+            f"Most recent rows: {recent_rows}. This data may be delayed."
         )
     else:
         text = (
@@ -127,7 +130,7 @@ def market_history(ticker: str, period: str = "1mo", **_: Any) -> dict:
         return {"status": "error", "error": f"market_provider_error:{exc}", "evidence": []}
     rows = []
     if not hist.empty:
-        for idx, row in hist.tail(config.MARKET_HISTORY_ROWS).iterrows():
+        for idx, row in hist.iterrows():
             rows.append({
                 "date": str(idx.date()),
                 "open": round(float(row["Open"]), 4),

@@ -289,12 +289,22 @@ def _citation_payload(cited: Iterable[str], context_chunks: list[dict]) -> list[
 
 
 def _merge_evidence(meta: dict, evidence: list[dict]) -> dict:
-    """Attach tool evidence to the synthesis context without duplicating chunks."""
+    """Attach tool evidence to the synthesis context without duplicating chunks.
+
+    RAG tools (filing_rag/multi_company_compare) return their chunks in BOTH meta.context_chunks
+    AND the flat evidence list, and in decompose mode that RAG set alone already fills
+    MAX_CONTEXT_CHUNKS. So evidence is split: chunks not already in context_chunks (screen/market/
+    compute — genuinely new, always small) go first and are guaranteed to survive truncation;
+    chunks that just duplicate the RAG set are no-ops via setdefault.
+    """
     if meta.get("refused"):
         return meta
+    context_chunks = meta.get("context_chunks", [])
+    existing_ids = {chunk["chunk_id"] for chunk in context_chunks}
+    new_evidence = [chunk for chunk in evidence if chunk["chunk_id"] not in existing_ids]
     by_id: dict[str, dict] = {}
-    for chunk in meta.get("context_chunks", []) + evidence:
-        by_id[chunk["chunk_id"]] = chunk
+    for chunk in new_evidence + context_chunks:
+        by_id.setdefault(chunk["chunk_id"], chunk)
     meta["context_chunks"] = list(by_id.values())[: config.MAX_CONTEXT_CHUNKS]
     return meta
 

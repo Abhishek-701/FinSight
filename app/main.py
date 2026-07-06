@@ -9,6 +9,7 @@ import logging
 import time
 import uuid
 from collections import defaultdict, deque
+from datetime import UTC, datetime
 
 from fastapi import Header, HTTPException, Request
 from fastapi import FastAPI
@@ -16,7 +17,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import audit, config, corpus, research, watchlist
+from app import audit, config, corpus, portfolio, research, screener, watchlist
 from app.agent import session
 from app.agent.context import from_history
 from app.tools import market
@@ -46,6 +47,12 @@ class ChatRequest(BaseModel):
 class WatchlistRequest(BaseModel):
     client_id: str
     ticker: str
+
+
+class PortfolioRequest(BaseModel):
+    client_id: str
+    ticker: str
+    shares: float
 
 
 def _guard(request: Request, x_api_key: str | None = Header(default=None)) -> None:
@@ -192,6 +199,85 @@ def quotes(tickers: str, request: Request, x_api_key: str | None = Header(defaul
     return {"quotes": [market.market_quote(t) for t in symbols]}
 
 
+@app.get("/api/history")
+def history(tickers: str, request: Request, x_api_key: str | None = Header(default=None),
+            period: str = "1mo"):
+    _guard(request, x_api_key)
+    if period not in config.MARKET_HISTORY_PERIODS:
+        raise HTTPException(status_code=400, detail="unsupported_period")
+    symbols = [t.strip().upper() for t in tickers.split(",") if t.strip()][:6]
+    return {"histories": [market.market_history(t, period) for t in symbols]}
+
+
+@app.get("/api/screener")
+def screener_snapshot(request: Request, x_api_key: str | None = Header(default=None), live: int = 1):
+    _guard(request, x_api_key)
+    return screener.snapshot(include_market=bool(live))
+
+
+def _portfolio_view(client_id: str) -> dict:
+    holdings = []
+    priced_value = 0.0
+    for holding in portfolio.items(client_id):
+        quote = market.market_quote(holding["ticker"])
+        if quote["status"] == "ok":
+            price = quote["data"]["price"]
+            change_percent = quote["data"]["change_percent"]
+            value = price * holding["shares"] if price is not None else None
+            market_status = "ok"
+        else:
+            price = value = change_percent = None
+            market_status = "unavailable"
+        if value is not None:
+            priced_value += value
+        holdings.append({
+            "ticker": holding["ticker"],
+            "company": holding["company"],
+            "shares": holding["shares"],
+            "updated_at": holding["updated_at"],
+            "price": price,
+            "value": value,
+            "weight": None,
+            "change_percent": change_percent,
+            "market_status": market_status,
+        })
+    for holding in holdings:
+        if holding["value"] is not None and priced_value:
+            holding["weight"] = holding["value"] / priced_value
+    return {
+        "client_id": client_id,
+        "as_of": datetime.now(UTC).replace(microsecond=0).isoformat(),
+        "total_value": priced_value,
+        "holdings": holdings,
+        "disclaimer": config.MARKET_DISCLAIMER,
+    }
+
+
+@app.get("/api/portfolio")
+def get_portfolio(client_id: str, request: Request, x_api_key: str | None = Header(default=None)):
+    _guard(request, x_api_key)
+    return _portfolio_view(client_id)
+
+
+@app.post("/api/portfolio")
+def set_portfolio_holding(req: PortfolioRequest, request: Request,
+                          x_api_key: str | None = Header(default=None)):
+    _guard(request, x_api_key)
+    try:
+        portfolio.set_holding(req.client_id, req.ticker, req.shares)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _portfolio_view(req.client_id)
+
+
+@app.delete("/api/portfolio/{ticker}")
+def remove_portfolio_holding(ticker: str, client_id: str, request: Request,
+                             x_api_key: str | None = Header(default=None)):
+    _guard(request, x_api_key)
+    portfolio.remove(client_id, ticker)
+    return _portfolio_view(client_id)
+
+
 @app.get("/api/corpus/status")
 def corpus_status():
     return _corpus_status()
@@ -208,6 +294,7 @@ def health():
         "anthropic_configured": bool(config.ANTHROPIC_API_KEY) if hasattr(config, "ANTHROPIC_API_KEY") else None,
         "session_store": session.status(),
         "watchlist_store": watchlist.status(),
+        "portfolio_store": portfolio.status(),
         "audit_log": audit.status(),
         "corpus": _corpus_status(),
         "external_state": {

@@ -43,7 +43,9 @@ RERANK_POOL = 30          # fuse this many candidates, rerank them, then take to
 FANOUT_CAP = 12           # max sub-queries; beyond this, answer primary metric + state what was dropped
 
 # --- Agent/tool execution ---
-AGENT_MAX_STEPS = 8
+# 12 (was 8): decompose-mode screener questions can stack facts_lookup/multi_company_compare +
+# screen_companies + up to 6 market_quote actions + synthesize_report; see DECISIONS "V2 screener".
+AGENT_MAX_STEPS = 12
 SEGMENT_INTENT_RE = (
     r"\b(segment|division|data\s+center|datacenter|sam'?s?\s*club|wholesale\s+club|"
     r"financial\s+products?|me&t)\b"
@@ -54,10 +56,26 @@ COMPUTE_INTENT_RE = (
     r"margin|ratio|percentage|percent|growth|change)\b"
 )
 
+# --- Screener (V2) ---
+# Ordered: first match wins. Checked BEFORE the more general COMPUTE_INTENT_RE-driven
+# compute_metric path so "operating margin" etc. route to the multi-company screen_companies
+# tool instead of the single-company market_cap_to_revenue compute tool.
+SCREEN_METRIC_PATTERNS: list[tuple[str, str]] = [
+    (r"\bnet\s+(profit\s+)?margins?\b", "net_margin"),
+    (r"\b(operating\s+)?margins?\b", "operating_margin"),
+    (r"\b(p/s|price.to.sales|ps\s+ratios?)\b", "ps_ratio"),
+    (r"\b(revenue|sales)\s+growth\b|\bgrowth\b", "revenue_growth_yoy"),
+    (r"\broe\b|return\s+on\s+equity", "roe"),
+]
+SCREEN_ORDER_ASC_RE = r"\b(lowest|smallest|least|worst|cheapest)\b"
+
 # --- Market data ---
 MARKET_PROVIDER = "yfinance"
 MARKET_CACHE_TTL_SECONDS = 60
 MARKET_HISTORY_CACHE_TTL_SECONDS = 300
+MARKET_HISTORY_PERIODS = ("1mo", "3mo", "6mo", "1y")
+# Caps only the tail embedded in the LLM-facing evidence TEXT (see build_market_chunk) so
+# long periods (6mo/1y) don't bloat synthesis context; REST callers get the full row set.
 MARKET_HISTORY_ROWS = 8
 MARKET_INTENT_RE = (
     r"\b(stock price|share price|current price|quote|trading|market cap|market capitalization|"

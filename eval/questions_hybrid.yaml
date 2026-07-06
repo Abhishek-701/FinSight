@@ -5,3 +5,15 @@
 - question: "Compare Apple's current market cap to its latest reported revenue."
   category: hybrid
   note: "Expected to combine market data and XBRL revenue, explicitly separating quote as-of time from filing period."
+
+- question: "Which company has the highest operating margin?"
+  category: screener
+  note: "V2 screener. Expected to use screen_companies(metric=operating_margin), cite an SCRN-* chunk, and correctly note JPMorgan has no comparable operating margin figure (banking P&L)."
+
+- question: "Which company has the lowest P/S ratio?"
+  category: screener
+  note: "V2 screener. Expected screen_companies(metric=ps_ratio, order=asc), combining live market cap with XBRL revenue across all six; cite SCRN-* and note data may be delayed."
+
+- question: "Which company has had the fastest revenue growth year over year?"
+  category: screener
+  note: "V2 screener. Expected screen_companies(metric=revenue_growth_yoy); facts_lookup may also fire (revenue keyword) — both are valid supporting evidence."

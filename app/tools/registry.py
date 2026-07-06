@@ -18,7 +18,7 @@ class ToolResult(dict):
 
 
 def _load_specs() -> dict[str, ToolSpec]:
-    from app.tools import compute, filings, market
+    from app.tools import compute, filings, market, screen
 
     specs = [
         ToolSpec("refuse_or_clarify", "Return a clarification refusal.", filings.refuse_or_clarify),
@@ -28,6 +28,8 @@ def _load_specs() -> dict[str, ToolSpec]:
         ToolSpec("market_quote", "Fetch latest quote data for a ticker.", market.market_quote),
         ToolSpec("market_history", "Fetch recent OHLCV history for a ticker.", market.market_history),
         ToolSpec("compute_metric", "Compute simple ratios from tool evidence.", compute.compute_metric),
+        ToolSpec("screen_companies", "Rank the six covered companies by a derived financial metric.",
+                 screen.screen_companies),
     ]
     return {spec.name: spec for spec in specs}
 

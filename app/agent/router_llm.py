@@ -26,6 +26,13 @@ def _mentioned_tickers(question: str, route: dict) -> list[str]:
     return tickers
 
 
+def _detect_screen_metric(question: str) -> str | None:
+    for pattern, metric in config.SCREEN_METRIC_PATTERNS:
+        if _matches(pattern, question):
+            return metric
+    return None
+
+
 def route_tools(question: str, route: dict | None = None, metrics: list[str] | None = None) -> dict:
     """Return a deterministic, bounded tool plan for now."""
     route = route or router.route(question)
@@ -34,6 +41,8 @@ def route_tools(question: str, route: dict | None = None, metrics: list[str] | N
     segment = _matches(config.SEGMENT_INTENT_RE, question)
     compute = _matches(config.COMPUTE_INTENT_RE, question)
     history = market and _matches(r"\b(history|chart|over the last|past|month|week|year)\b", question)
+    screen_metric = _detect_screen_metric(question)
+    screen = route["mode"] == "decompose" and screen_metric is not None and bool(router.SUPERLATIVE_RE.search(question))
     actions: list[dict] = []
 
     if route["mode"] == "clarify" and not market:
@@ -50,12 +59,16 @@ def route_tools(question: str, route: dict | None = None, metrics: list[str] | N
         elif not market and not metrics:
             actions.append({"tool": "filing_rag", "tickers": route["tickers"]})
 
-        if market:
+        if screen:
+            order = "asc" if _matches(config.SCREEN_ORDER_ASC_RE, question) else "desc"
+            actions.append({"tool": "screen_companies", "args": {"metric": screen_metric, "order": order}})
+
+        if market and not screen:
             for ticker in _mentioned_tickers(question, route):
                 actions.append({"tool": "market_history" if history else "market_quote",
                                 "args": {"ticker": ticker}})
 
-        if compute:
+        if compute and not screen:
             actions.append({"tool": "compute_metric", "args": {"metric": "market_cap_to_revenue"}})
 
         actions.append({"tool": "synthesize_report"})
@@ -67,5 +80,6 @@ def route_tools(question: str, route: dict | None = None, metrics: list[str] | N
         "market_intent": market,
         "segment_intent": segment,
         "compute_intent": compute,
+        "screen_intent": screen,
         "actions": actions[: config.AGENT_MAX_STEPS],
     }

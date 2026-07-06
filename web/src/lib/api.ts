@@ -1,4 +1,13 @@
-import type { ChatResponse, QuoteResult, SessionMessage, WatchlistItem } from './types'
+import type {
+  ChatResponse,
+  HistoryPeriod,
+  HistoryResult,
+  PortfolioResponse,
+  QuoteResult,
+  ScreenerResponse,
+  SessionMessage,
+  WatchlistItem,
+} from './types'
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
@@ -78,4 +87,31 @@ export function removeWatchlist(clientId: string, ticker: string): Promise<{ ok:
 export function getQuotes(tickers: string[]): Promise<{ quotes: QuoteResult[] }> {
   if (!tickers.length) return Promise.resolve({ quotes: [] })
   return jsonFetch(`/api/quotes?tickers=${encodeURIComponent(tickers.join(','))}`)
+}
+
+export function getHistory(tickers: string[], period: HistoryPeriod): Promise<{ histories: HistoryResult[] }> {
+  if (!tickers.length) return Promise.resolve({ histories: [] })
+  return jsonFetch(`/api/history?tickers=${encodeURIComponent(tickers.join(','))}&period=${period}`)
+}
+
+export function getScreener(): Promise<ScreenerResponse> {
+  return jsonFetch('/api/screener?live=1')
+}
+
+export function getPortfolio(clientId: string): Promise<PortfolioResponse> {
+  return jsonFetch(`/api/portfolio?client_id=${encodeURIComponent(clientId)}`)
+}
+
+export function setHolding(clientId: string, ticker: string, shares: number): Promise<PortfolioResponse> {
+  return jsonFetch('/api/portfolio', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId, ticker, shares }),
+  })
+}
+
+export function removeHolding(clientId: string, ticker: string): Promise<PortfolioResponse> {
+  return jsonFetch(`/api/portfolio/${encodeURIComponent(ticker)}?client_id=${encodeURIComponent(clientId)}`, {
+    method: 'DELETE',
+  })
 }
