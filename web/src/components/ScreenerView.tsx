@@ -28,9 +28,10 @@ function nullNote(ticker: string, key: SortKey): string {
 
 interface Props {
   onCompare: (tickers: string[]) => void
+  onInsight: (ticker: string) => void
 }
 
-export default function ScreenerView({ onCompare }: Props) {
+export default function ScreenerView({ onCompare, onInsight }: Props) {
   const { rows, asOf, loading, error } = useScreener()
   const [sortKey, setSortKey] = useState<SortKey>('market_cap')
   const [sortDesc, setSortDesc] = useState(true)
@@ -78,6 +79,7 @@ export default function ScreenerView({ onCompare }: Props) {
               <tr>
                 <th></th>
                 <th>Ticker</th>
+                <th></th>
                 {COLUMNS.map((col) => (
                   <th key={col.key} onClick={() => toggleSort(col.key)} className="sortable">
                     {col.label}
@@ -101,6 +103,11 @@ export default function ScreenerView({ onCompare }: Props) {
                   <td>
                     <b>{row.ticker}</b>
                     <span className="muted"> {row.company}</span>
+                  </td>
+                  <td>
+                    <button className="chip" onClick={() => onInsight(row.ticker)}>
+                      Insight
+                    </button>
                   </td>
                   {COLUMNS.map((col) => {
                     const raw = row[col.key]

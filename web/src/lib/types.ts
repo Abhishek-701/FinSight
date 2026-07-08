@@ -57,7 +57,18 @@ export interface Turn {
   data: ChatResponse
 }
 
-export type View = 'chat' | 'screener' | 'compare' | 'portfolio'
+export type View = 'chat' | 'screener' | 'compare' | 'portfolio' | 'insight'
+
+export interface ToolCallSummary {
+  tool: string
+  status?: string
+  elapsed_ms?: number
+}
+
+export interface PlanSummary {
+  strategy?: string
+  intent?: string
+}
 
 export interface ScreenerRow {
   ticker: string
@@ -128,4 +139,43 @@ export interface PortfolioResponse {
   total_value: number
   holdings: PortfolioHolding[]
   disclaimer: string
+}
+
+export interface ValuationMetric {
+  metric: string
+  value: number
+  formula: string
+  inputs: Record<string, unknown>
+  source_ids: string[]
+}
+
+export interface RankInfo {
+  rank: number
+  of: number
+  value: number
+}
+
+export interface InsightCardData {
+  ticker: string
+  company: string
+  as_of: string
+  quote: QuoteData | null
+  history: HistoryResult['data'] | null
+  fundamentals: ScreenerRow
+  valuation: {
+    pe_ratio?: ValuationMetric
+    ps_ratio?: ValuationMetric
+    price_change?: ValuationMetric
+  }
+  ranks: Record<string, RankInfo>
+  disclaimer: string
+  market_status: 'ok' | 'unavailable'
+}
+
+export interface InsightBrief extends InsightCardData {
+  answer: string
+  citations: string[]
+  citation_details: CitationDetail[]
+  tool_calls: ToolCallSummary[]
+  elapsed_ms: number
 }

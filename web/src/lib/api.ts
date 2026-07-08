@@ -2,6 +2,7 @@ import type {
   ChatResponse,
   HistoryPeriod,
   HistoryResult,
+  InsightBrief,
   PortfolioResponse,
   QuoteResult,
   ScreenerResponse,
@@ -31,12 +32,8 @@ export interface SseEvent {
   data: Record<string, unknown>
 }
 
-export async function* streamChat(message: string, sessionId: string | null): AsyncGenerator<SseEvent> {
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId, stream: true }),
-  })
+/** Shared SSE body parser: both /api/chat (stream:true) and /api/insight/{ticker}/stream use this wire format. */
+async function* parseSse(res: Response): AsyncGenerator<SseEvent> {
   if (!res.ok || !res.body) throw new Error(`${res.status} ${res.statusText}`)
 
   const reader = res.body.getReader()
@@ -56,6 +53,24 @@ export async function* streamChat(message: string, sessionId: string | null): As
       yield { event: eventLine.slice(7), data: JSON.parse(dataLine.slice(6)) }
     }
   }
+}
+
+export async function* streamChat(message: string, sessionId: string | null): AsyncGenerator<SseEvent> {
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, session_id: sessionId, stream: true }),
+  })
+  yield* parseSse(res)
+}
+
+export async function* streamInsight(ticker: string): AsyncGenerator<SseEvent> {
+  const res = await fetch(`/api/insight/${encodeURIComponent(ticker)}/stream`)
+  yield* parseSse(res)
+}
+
+export function getInsight(ticker: string): Promise<InsightBrief> {
+  return jsonFetch(`/api/insight/${encodeURIComponent(ticker)}`)
 }
 
 export function getSession(sessionId: string): Promise<{ session_id: string; messages: SessionMessage[] }> {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getSession, streamChat } from '../lib/api'
 import { titleFromQuestion } from '../lib/format'
-import type { CitationDetail } from '../lib/types'
+import type { CitationDetail, PlanSummary, ToolCallSummary } from '../lib/types'
 
 export interface ChatTurn {
   question: string
@@ -9,6 +9,8 @@ export interface ChatTurn {
   citationDetails: CitationDetail[]
   streaming: boolean
   refused?: boolean
+  toolCalls?: ToolCallSummary[]
+  plan?: PlanSummary
 }
 
 export interface ChatWindow {
@@ -109,10 +111,12 @@ export function useChat() {
           } else if (evt.event === 'done') {
             const citationDetails = (evt.data.citations as CitationDetail[]) || []
             const refused = Boolean(evt.data.refused)
+            const toolCalls = (evt.data.tool_calls as ToolCallSummary[]) || []
+            const plan = (evt.data.plan as PlanSummary) || undefined
             setTurns((prev) => {
               const next = [...prev]
               const last = next[next.length - 1]
-              const finished = { ...last, citationDetails, refused, streaming: false }
+              const finished = { ...last, citationDetails, refused, toolCalls, plan, streaming: false }
               next[next.length - 1] = finished
               if (sid) {
                 localTurnsRef.current[sid] = [...(localTurnsRef.current[sid] || []), finished].slice(-20)

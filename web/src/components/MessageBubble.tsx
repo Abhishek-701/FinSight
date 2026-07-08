@@ -3,17 +3,22 @@ import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import { markCitations, money } from '../lib/format'
 import type { ChatTurn } from '../hooks/useChat'
+import type { HistoryRow } from '../lib/types'
+import Sparkline from './Sparkline'
 
-function marketDetail(turn: ChatTurn) {
-  return turn.citationDetails.find((c) => c.chunk_id.includes('-MKT-'))
+function marketDetails(turn: ChatTurn) {
+  return turn.citationDetails.filter((c) => c.chunk_id.includes('-MKT-'))
 }
 
 function MarketStrip({ turn }: { turn: ChatTurn }) {
-  const market = marketDetail(turn)
-  const data = market?.data as { price?: number; market_cap?: number; as_of?: string } | undefined
+  const details = marketDetails(turn)
+  const quote = details.find((d) => (d.data as { price?: number } | undefined)?.price !== undefined)
+  const history = details.find((d) => Array.isArray((d.data as { rows?: unknown } | undefined)?.rows))
+  const data = quote?.data as { price?: number; market_cap?: number; as_of?: string } | undefined
   const price = data?.price ?? null
   const marketCap = data?.market_cap ?? null
-  if (price === null && marketCap === null) return null
+  const rows = (history?.data as { rows?: HistoryRow[] } | undefined)?.rows ?? []
+  if (price === null && marketCap === null && rows.length < 2) return null
   const priceStr = money(price)
   const capStr = money(marketCap)
   const asOf = data?.as_of ? String(data.as_of).slice(0, 10) : null
@@ -29,7 +34,25 @@ function MarketStrip({ turn }: { turn: ChatTurn }) {
           <span className="strip-label">Mkt Cap</span> <strong>{capStr}</strong>
         </span>
       )}
+      {rows.length >= 2 && <Sparkline rows={rows} width={90} height={26} />}
       {asOf && <span className="strip-as-of">as of {asOf}</span>}
+    </div>
+  )
+}
+
+function ToolTrace({ turn }: { turn: ChatTurn }) {
+  if (!turn.toolCalls?.length) return null
+  return (
+    <div className="tool-trace">
+      {turn.plan?.strategy && <span className="strategy-badge">{turn.plan.strategy}</span>}
+      {turn.toolCalls
+        .filter((t) => t.tool !== 'synthesize_report')
+        .map((t, i) => (
+          <span key={`${t.tool}-${i}`} className="trace-chip">
+            {t.tool}
+            {typeof t.elapsed_ms === 'number' && <span className="trace-ms"> · {t.elapsed_ms}ms</span>}
+          </span>
+        ))}
     </div>
   )
 }
@@ -70,6 +93,7 @@ export default function MessageBubble({ turn }: { turn: ChatTurn }) {
             {markCitations(turn.answer)}
           </ReactMarkdown>
         </div>
+        {!turn.streaming && <ToolTrace turn={turn} />}
         {!turn.streaming && <Sources turn={turn} />}
       </article>
     </>

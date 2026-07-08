@@ -19,6 +19,7 @@ const NAV_ITEMS: { view: View; label: string }[] = [
   { view: 'screener', label: 'Screener' },
   { view: 'compare', label: 'Compare' },
   { view: 'portfolio', label: 'Portfolio' },
+  { view: 'insight', label: 'Insight' },
 ]
 
 export default function Sidebar({

@@ -4,7 +4,12 @@ import { useHistories } from '../hooks/useHistories'
 import Sparkline from './Sparkline'
 import { money } from '../lib/format'
 
-export default function WatchlistPanel({ companies }: { companies: Record<string, string> }) {
+interface Props {
+  companies: Record<string, string>
+  onInsight: (ticker: string) => void
+}
+
+export default function WatchlistPanel({ companies, onInsight }: Props) {
   const { items, add, remove } = useWatchlist()
   const tickers = items.map((i) => i.ticker)
   const quotes = useQuotes(tickers)
@@ -26,10 +31,10 @@ export default function WatchlistPanel({ companies }: { companies: Record<string
               <button className="star-btn" onClick={() => remove(item.ticker)} title="Remove from watchlist">
                 ★
               </button>
-              <div className="watchlist-info">
+              <button className="watchlist-info watchlist-info-btn" onClick={() => onInsight(item.ticker)}>
                 <b>{item.ticker}</b>
                 <span>{item.company}</span>
-              </div>
+              </button>
               <Sparkline rows={histories[item.ticker] || []} />
               <div className="watchlist-quote">
                 {quote?.status === 'ok' && data ? (

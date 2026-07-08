@@ -191,3 +191,17 @@ input:focus { border-color: #b9dec4; box-shadow: 0 0 0 4px rgba(12, 166, 120, 0.
 .preview-note { font-size: 12px; }
 .allocation-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; margin-bottom: 16px; background: var(--line); }
 .allocation-segment { transition: width 0.3s; }
+
+/* Insight Brief */
+.insight-view { max-width: 900px; margin: 0 auto; width: 100%; }
+.company-picker-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.insight-card { max-width: none; }
+.valuation-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.valuation-tile { display: flex; flex-direction: column; gap: 4px; background: #fbfaf6; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.valuation-tile strong { font-size: 16px; color: var(--green-dark); }
+.rank-badge { font-size: 10px; color: var(--muted); background: #eee8db; border-radius: 999px; padding: 1px 7px; width: fit-content; }
+.tool-trace { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.strategy-badge { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--green-dark); background: #e8f6ed; border-radius: 999px; padding: 2px 8px; font-weight: 800; }
+.trace-chip { font-size: 11px; color: #5a554c; background: #f1ebe0; border-radius: 999px; padding: 3px 9px; }
+.trace-ms { color: var(--muted); }
+.watchlist-info-btn { border: 0; background: transparent; cursor: pointer; text-align: left; padding: 0; }

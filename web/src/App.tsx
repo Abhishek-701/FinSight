@@ -6,6 +6,7 @@ import WatchlistPanel from './components/WatchlistPanel'
 import ScreenerView from './components/ScreenerView'
 import CompareView from './components/CompareView'
 import PortfolioView from './components/PortfolioView'
+import InsightView from './components/InsightView'
 import { useChat } from './hooks/useChat'
 import { getCompanies } from './lib/api'
 import type { View } from './lib/types'
@@ -17,6 +18,7 @@ function App() {
   const [online, setOnline] = useState(true)
   const [view, setView] = useState<View>('chat')
   const [compareTickers, setCompareTickers] = useState<string[]>([])
+  const [insightTicker, setInsightTicker] = useState<string | null>(null)
 
   useEffect(() => {
     getCompanies()
@@ -34,11 +36,17 @@ function App() {
     setView('compare')
   }
 
+  function handleInsight(ticker: string) {
+    setInsightTicker(ticker)
+    setView('insight')
+  }
+
   const titles: Record<View, string> = {
     chat: 'Filings RAG + XBRL facts + market data',
     screener: 'Rank the six companies by financial and valuation metrics',
     compare: 'Side-by-side comparison',
     portfolio: 'Track your holdings and allocation',
+    insight: 'Quote, valuation, ranks, and filing narrative for one company',
   }
 
   return (
@@ -67,13 +75,14 @@ function App() {
         </header>
         <section className="workspace">
           {view === 'chat' && <ChatView turns={turns} />}
-          {view === 'screener' && <ScreenerView onCompare={handleCompare} />}
+          {view === 'screener' && <ScreenerView onCompare={handleCompare} onInsight={handleInsight} />}
           {view === 'compare' && <CompareView tickers={compareTickers} />}
           {view === 'portfolio' && <PortfolioView companies={companies} />}
+          {view === 'insight' && <InsightView companies={companies} initialTicker={insightTicker} />}
         </section>
         {view === 'chat' && <Composer isBusy={isBusy} onAsk={ask} onClear={newChat} />}
       </main>
-      <WatchlistPanel companies={companies} />
+      <WatchlistPanel companies={companies} onInsight={handleInsight} />
     </div>
   )
 }
