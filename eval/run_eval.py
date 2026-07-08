@@ -120,6 +120,88 @@ def _score(item: dict, res: dict) -> dict:
             f"citations={citations}",
         )
 
+    calc_citations = [c for c in citations if "-CALC-" in c]
+
+    if category == "valuation":
+        _add_check(
+            checks,
+            "market_tool_selected",
+            "market_quote" in tool_names,
+            f"tools={tool_names}",
+        )
+        _add_check(
+            checks,
+            "calc_citation_present",
+            bool(calc_citations),
+            f"calc_citations={calc_citations}",
+        )
+        _add_check(
+            checks,
+            "non_calc_citation_present",
+            any("-CALC-" not in c for c in citations),
+            f"citations={citations}; a valuation ratio needs an XBRL or SCRN source alongside the calc",
+        )
+        _add_check(
+            checks,
+            "market_as_of_present",
+            "as of" in res.get("answer", "").lower(),
+            "valuation answers should state quote freshness",
+        )
+        _add_check(
+            checks,
+            "not_advice_language",
+            "advice" in res.get("answer", "").lower(),
+            "valuation answers should disclaim investment advice",
+        )
+
+    if category == "explain_move":
+        _add_check(
+            checks,
+            "history_tool_selected",
+            "market_history" in tool_names,
+            f"tools={tool_names}",
+        )
+        _add_check(
+            checks,
+            "market_and_calc_citations",
+            bool(market_citations) and bool(calc_citations),
+            f"market={market_citations}; calc={calc_citations}",
+        )
+        _add_check(
+            checks,
+            "filing_citation_present",
+            any("-MKT-" not in c and "-CALC-" not in c for c in citations),
+            f"citations={citations}",
+        )
+        _add_check(
+            checks,
+            "market_as_of_present",
+            "as of" in res.get("answer", "").lower(),
+            "explain-move answers should state quote freshness",
+        )
+        # Causal-language leakage ("caused", "because of", "due to" tying a filing risk to the
+        # price move) is not reliably checkable with a deterministic string match — graded by
+        # human review of the answer in results_v3.md, per the guidance in synthesize.py.
+
+    if category == "insight":
+        _add_check(
+            checks,
+            "company_insight_tool_selected",
+            "company_insight" in tool_names,
+            f"tools={tool_names}",
+        )
+        namespaces = {
+            "rag" if "-XBRL-" not in c and "-MKT-" not in c and "-CALC-" not in c and "SCRN-" not in c else
+            "xbrl" if "-XBRL-" in c else "market" if "-MKT-" in c else "calc" if "-CALC-" in c else "screen"
+            for c in citations
+        }
+        _add_check(
+            checks,
+            "citations_span_multiple_sources",
+            len(namespaces) >= 3,
+            f"citation_namespaces={sorted(namespaces)}",
+        )
+
     _add_check(
         checks,
         "agent_metadata",

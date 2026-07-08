@@ -1,0 +1,42 @@
+# V3 eval suite: valuation-aware chat, explain-the-move, insight brief, and hybrid-router
+# regression guards. Run with: python eval/run_eval.py eval/questions_v3.yaml eval/results_v3.md eval/results_v3.json
+
+- question: "Is NVIDIA expensive right now?"
+  category: valuation
+  note: "Expected facts_lookup + market_quote + compute_metric(pe_ratio, ps_ratio) + screen_companies(ps_ratio); cite -CALC- and non-market evidence; state ratios are point-in-time and not advice."
+
+- question: "Is Coca-Cola cheap compared to the other companies?"
+  category: valuation
+  note: "Same valuation flow for KO; answer should compare against peers via the SCRN-* chunk, not just state a bare number."
+
+- question: "What is Apple's P/E ratio?"
+  category: valuation
+  note: "Narrower phrasing (no 'expensive'/'cheap') should still trigger the valuation intent via the p/e pattern."
+
+- question: "Why is NVIDIA down this month?"
+  category: explain_move
+  note: "Expected market_history(1mo) + market_quote + compute_metric(price_change) + filing_rag; answer must state the move factually first, then filing-disclosed risk factors framed as context, never as the cause."
+
+- question: "Explain Caterpillar's stock move over the past 3 months"
+  category: explain_move
+  note: "period should resolve to 3mo from '3 months' phrasing."
+
+- question: "Why did Walmart's stock jump recently?"
+  category: explain_move
+  note: "Paraphrase without an explicit period; defaults to 1mo."
+
+- question: "Give me an insight brief on Apple"
+  category: insight
+  note: "Expected company_insight + filing_rag; citations should span filing (RAG), XBRL, market, and compute evidence."
+
+- question: "Full brief on JPMorgan"
+  category: insight
+  note: "Shorter insight-intent phrasing without the word 'brief' twice; should still route to company_insight."
+
+- question: "What is NVIDIA's current stock price and latest reported revenue?"
+  category: hybrid
+  note: "Regression guard: plain hybrid question must be unaffected by the V3 valuation/explain-move/insight branches."
+
+- question: "Tell me about Walmart"
+  category: summary
+  note: "Regression guard: the 4-topic full-company summary shortcut must fire before router_tools ever sees the question, so it is untouched by V3 routing."
