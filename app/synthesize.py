@@ -45,6 +45,28 @@ SYSTEM = (
 )
 
 
+VALUATION_GUIDANCE = (
+    "This question asks about valuation. Additional framing rules:\n"
+    "- Valuation ratios (P/E, P/S) combine a live/delayed market price with historical filing "
+    "figures — state that explicitly.\n"
+    "- Give each ratio with its inputs, citing the [*-CALC-*] chunk that computed it; compare "
+    "against peers using the [SCRN-*] chunk if present.\n"
+    "- Never say a stock IS cheap/expensive or should be bought/sold. Describe where the ratio "
+    "sits relative to the other covered companies and note this is not investment advice."
+)
+EXPLAIN_MOVE_GUIDANCE = (
+    "This question asks why a stock price moved. Additional framing rules:\n"
+    "- SEC filings do not explain short-term price moves. NEVER claim a filing-disclosed factor "
+    "caused the move.\n"
+    "- First state the move factually from market data with its as-of time, citing the "
+    "[*-MKT-*] and [*-CALC-*] chunks.\n"
+    "- Then present filing-disclosed factors investors may weigh (risks, segment exposure, "
+    "outlook), each cited to a filing chunk, framed as context — use language like 'the filing "
+    "discloses' or 'a risk factor investors may weigh is', never 'this caused the decline'.\n"
+    "- If the filings contain nothing relevant to the move, say so plainly."
+)
+
+
 def build_context(chunks: list[dict]) -> str:
     blocks = []
     for c in chunks:
@@ -116,10 +138,12 @@ def build_xbrl_context(facts: list[dict]) -> tuple[str, list[dict]]:
     return context_str, synthetic_chunks
 
 
-def stream_answer(question: str, chunks: list[dict]):
+def stream_answer(question: str, chunks: list[dict], guidance: str | None = None):
     """Yield answer text chunks (for SSE). Caller accumulates for citations/gaps."""
     context = build_context(chunks)
     user = f"Context:\n{context}\n\nQuestion: {question}\n\nAnswer using only the context above, citing chunk ids."
+    if guidance:
+        user += f"\n\n{guidance}"
     with _client.messages.stream(
         model=config.CHAT_MODEL,
         max_tokens=2000,

@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 
-def facts_lookup(question: str, route: dict) -> dict:
+def facts_lookup(question: str, route: dict, metrics: list[str] | None = None) -> dict:
+    """Look up XBRL facts. When `metrics` is given explicitly (V3 valuation plans), those
+    metrics are queried directly instead of re-detecting them from the question text — needed
+    because questions like "is NVDA expensive?" don't match any XBRL keyword pattern.
+    """
     from app import research
 
-    meta = research.xbrl_lookup(question, route)
+    meta = research.xbrl_lookup(question, route, metrics=metrics)
     return {
         "status": "hit" if meta else "miss",
-        "metrics": research.detect_xbrl_metrics(question),
+        "metrics": metrics or research.detect_xbrl_metrics(question),
         "meta": meta,
         "evidence": meta.get("context_chunks", []) if meta else [],
     }

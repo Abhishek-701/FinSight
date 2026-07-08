@@ -88,6 +88,11 @@ def _row_for_ticker(ticker: str, include_market: bool) -> dict:
     }
 
 
+def row(ticker: str, include_market: bool = True) -> dict:
+    """One company's screener row, without quoting all six tickers (used by the insight brief)."""
+    return _row_for_ticker(ticker, include_market)
+
+
 def snapshot(include_market: bool = True) -> dict:
     """Return {"as_of", "rows", "disclaimer"} — one row per config.COMPANIES ticker."""
     rows = [_row_for_ticker(ticker, include_market) for ticker in config.COMPANIES]

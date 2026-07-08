@@ -146,15 +146,22 @@ def plan(question: str, route: dict | None = None) -> dict:
     return route_tools(question, route, metrics)
 
 
-def xbrl_lookup(question: str, route: dict) -> dict | None:
-    """Check the XBRL fact store for a numeric answer. Returns XBRL meta dict or None."""
+def xbrl_lookup(question: str, route: dict, metrics: list[str] | None = None) -> dict | None:
+    """Check the XBRL fact store for a numeric answer. Returns XBRL meta dict or None.
+
+    `metrics`, when given explicitly, is used as-is instead of re-detecting metrics from
+    the question text (V3 valuation plans pass a fixed metric list for questions like
+    "is NVDA expensive?" that don't match any XBRL keyword pattern).
+    """
     mode = route["mode"]
     tickers = route["tickers"]
 
-    if _SEGMENT_BAIL_RE.search(question) or _is_segment_question(question):
-        return None
-
-    matched_metrics = detect_xbrl_metrics(question)
+    if metrics is None:
+        if _SEGMENT_BAIL_RE.search(question) or _is_segment_question(question):
+            return None
+        matched_metrics = detect_xbrl_metrics(question)
+    else:
+        matched_metrics = metrics
     if not matched_metrics:
         return None
 
@@ -288,6 +295,19 @@ def _citation_payload(cited: Iterable[str], context_chunks: list[dict]) -> list[
     } for cid in cited if cid in ctx]
 
 
+_MARKET_EVIDENCE_INTENTS = {"valuation", "explain_move", "insight", "hybrid", "market_only"}
+
+
+def _guidance_for(research_plan: dict) -> str | None:
+    """Map a plan's intent to its synthesis guidance block, if any."""
+    intent = research_plan.get("intent")
+    if intent == "valuation":
+        return synthesize.VALUATION_GUIDANCE
+    if intent == "explain_move":
+        return synthesize.EXPLAIN_MOVE_GUIDANCE
+    return None
+
+
 def _merge_evidence(meta: dict, evidence: list[dict]) -> dict:
     """Attach tool evidence to the synthesis context without duplicating chunks.
 
@@ -313,6 +333,14 @@ def _prepare_with_tools(question: str, route: dict, research_plan: dict) -> tupl
     context = {"question": question, "route": route}
     tool_calls, evidence = executor.execute(research_plan["actions"], context)
     meta = context.get("meta")
+    # filing_rag's threshold-refused meta becomes context["meta"] and would normally short-circuit
+    # everything else (_merge_evidence early-returns on refused). For V3 intents where market/
+    # compute evidence is the point (valuation, explain-move, insight), a refused RAG meta with
+    # non-empty tool evidence should NOT drop that evidence — treat the meta as absent instead so
+    # the synthetic-meta branch below builds a non-refused context around the tool evidence.
+    if (meta is not None and meta.get("refused") and evidence
+            and research_plan.get("intent") in _MARKET_EVIDENCE_INTENTS):
+        meta = None
     if not meta and evidence:
         meta = {"route": route, "sub_queries": [], "retrieval": [], "context_chunks": evidence,
                 "refused": False, "xbrl_hit": False}
@@ -408,9 +436,9 @@ def _run_summary(question: str, ticker: str, route: dict, started: float) -> dic
     }
 
 
-def finalize(question: str, meta: dict) -> dict:
+def finalize(question: str, meta: dict, guidance: str | None = None) -> dict:
     """Shared tail: synthesize, extract citations, and attach reflection metadata."""
-    text = "".join(synthesize.stream_answer(question, meta["context_chunks"]))
+    text = "".join(synthesize.stream_answer(question, meta["context_chunks"], guidance))
     cited = sorted(set(CITATION_RE.findall(text)))
     reflection = reflect(meta, text)
     return {
@@ -448,7 +476,7 @@ def run(question: str, conversation_context: ConversationContext | None = None) 
                 "elapsed_ms": _elapsed(started)}
 
     tool_start = time.perf_counter()
-    result = finalize(working_question, meta)
+    result = finalize(working_question, meta, _guidance_for(research_plan))
     tool_calls.append({
         "tool": "synthesize_report",
         "status": "ok",
@@ -563,7 +591,7 @@ def stream_events(question: str, conversation_context: ConversationContext | Non
     ctx = {c["chunk_id"]: c for c in meta["context_chunks"]}
     acc = []
     tool_start = time.perf_counter()
-    for token in synthesize.stream_answer(working_question, meta["context_chunks"]):
+    for token in synthesize.stream_answer(working_question, meta["context_chunks"], _guidance_for(research_plan)):
         acc.append(token)
         yield sse("token", {"text": token})
 
