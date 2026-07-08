@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import audit, config, corpus, portfolio, research, screener, watchlist
+from app import audit, config, corpus, insight, portfolio, research, screener, watchlist
 from app.agent import session
 from app.agent.context import from_history
 from app.tools import market
@@ -276,6 +276,24 @@ def remove_portfolio_holding(ticker: str, client_id: str, request: Request,
     _guard(request, x_api_key)
     portfolio.remove(client_id, ticker)
     return _portfolio_view(client_id)
+
+
+@app.get("/api/insight/{ticker}")
+def insight_brief(ticker: str, request: Request, x_api_key: str | None = Header(default=None)):
+    _guard(request, x_api_key)
+    ticker = ticker.upper()
+    if ticker not in config.COMPANIES:
+        raise HTTPException(status_code=400, detail="unsupported_ticker")
+    return insight.brief(ticker)
+
+
+@app.get("/api/insight/{ticker}/stream")
+def insight_brief_stream(ticker: str, request: Request, x_api_key: str | None = Header(default=None)):
+    _guard(request, x_api_key)
+    ticker = ticker.upper()
+    if ticker not in config.COMPANIES:
+        raise HTTPException(status_code=400, detail="unsupported_ticker")
+    return StreamingResponse(insight.stream_brief(ticker), media_type="text/event-stream")
 
 
 @app.get("/api/corpus/status")

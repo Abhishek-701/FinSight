@@ -22,8 +22,18 @@ class ToolResult(dict):
     """Dictionary result with a consistent status envelope."""
 
 
+def _company_insight(**kwargs: Any) -> dict[str, Any]:
+    # Lazy, like filings.py's `from app import research` inside each function: app.insight
+    # imports app.research (for its citation/SSE helpers), which imports this registry via
+    # the executor — importing app.insight at _load_specs() module-load time would cycle back
+    # here before app.insight finishes defining company_insight.
+    from app import insight
+
+    return insight.company_insight(**kwargs)
+
+
 def _load_specs() -> dict[str, ToolSpec]:
-    from app import config, insight
+    from app import config
     from app.screener import DERIVED_METRICS
     from app.tools import compute, filings, market, screen
 
@@ -81,7 +91,7 @@ def _load_specs() -> dict[str, ToolSpec]:
             "company_insight",
             "Assemble a one-company insight brief: live quote, price trend, valuation "
             "ratios, screener ranks, and filing evidence for one ticker.",
-            insight.company_insight,
+            _company_insight,
             arg_spec={"ticker": tickers},
         ),
     ]

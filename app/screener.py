@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app import config, facts
-from app.tools import market
 
 _RAW_METRICS = ("revenue", "operating_income", "net_income", "equity")
 _MARKET_DEPENDENT = ("price", "market_cap", "ps_ratio")
@@ -58,6 +57,7 @@ def _row_for_ticker(ticker: str, include_market: bool) -> dict:
     price = market_cap = ps_ratio = None
     market_status = "skipped"
     if include_market:
+        from app.tools import market  # lazy: avoids a screener<->tools.registry import cycle
         quote = market.market_quote(ticker)
         if quote["status"] == "ok":
             price = quote["data"]["price"]
