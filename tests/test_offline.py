@@ -93,6 +93,69 @@ class OfflineProductTests(unittest.TestCase):
         result = screen_companies(metric="not_a_real_metric")
         self.assertEqual(result["status"], "unsupported")
 
+    def test_compute_pe_ratio_from_price_and_eps(self):
+        evidence = [
+            {"kind": "market", "ticker": "NVDA", "company": "NVIDIA", "chunk_id": "NVDA-MKT-Q",
+             "data": {"price": 120.0}},
+            {"kind": "xbrl", "ticker": "NVDA", "company": "NVIDIA", "chunk_id": "NVDA-XBRL-EPS",
+             "facts": [{"concept": "us-gaap:EarningsPerShareDiluted", "label": "annual_recent",
+                        "value_scaled": 3.0}]},
+        ]
+        result = compute_metric("pe_ratio", evidence=evidence)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["data"]["value"], 40.0)
+        self.assertEqual(result["data"]["formula"], "price / eps_diluted")
+        self.assertEqual(result["evidence"][0]["kind"], "compute")
+        self.assertIn("-CALC-pe_ratio", result["evidence"][0]["chunk_id"])
+
+    def test_compute_pe_ratio_falls_back_to_market_cap_over_net_income(self):
+        evidence = [
+            {"kind": "market", "ticker": "NVDA", "company": "NVIDIA", "chunk_id": "NVDA-MKT-Q",
+             "data": {"market_cap": 3_000_000_000_000}},
+            {"kind": "xbrl", "ticker": "NVDA", "company": "NVIDIA", "chunk_id": "NVDA-XBRL-NI",
+             "facts": [{"concept": "us-gaap:NetIncomeLoss", "label": "annual_recent",
+                        "value_scaled": 30_000_000_000}]},
+        ]
+        result = compute_metric("pe_ratio", evidence=evidence)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["data"]["value"], 100.0)
+        self.assertEqual(result["data"]["formula"], "market_cap / net_income")
+
+    def test_compute_price_change_from_history_rows(self):
+        evidence = [
+            {"kind": "market", "ticker": "NVDA", "company": "NVIDIA", "chunk_id": "NVDA-MKT-HIST",
+             "data": {"rows": [
+                 {"date": "2026-06-01", "close": 100.0},
+                 {"date": "2026-06-15", "close": 105.0},
+                 {"date": "2026-07-01", "close": 90.0},
+             ]}},
+        ]
+        result = compute_metric("price_change", evidence=evidence)
+        self.assertEqual(result["status"], "ok")
+        self.assertAlmostEqual(result["data"]["value"], -10.0)
+        self.assertEqual(result["data"]["inputs"]["first_close"], 100.0)
+        self.assertEqual(result["data"]["inputs"]["last_close"], 90.0)
+
+    def test_compute_ps_alias_matches_market_cap_to_revenue(self):
+        evidence = [
+            {"kind": "xbrl", "ticker": "AAPL", "company": "Apple", "chunk_id": "AAPL-XBRL-Revenue",
+             "facts": [{"concept": "us-gaap:Revenues", "label": "annual_recent",
+                        "value_scaled": 400_000_000_000}]},
+            {"kind": "market", "chunk_id": "AAPL-MKT-TEST", "data": {"market_cap": 4_000_000_000_000}},
+        ]
+        result = compute_metric("ps_ratio", evidence=evidence)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["data"]["value"], 10)
+        self.assertIn("-CALC-ps_ratio", result["evidence"][0]["chunk_id"])
+
+    def test_compute_missing_input_statuses(self):
+        self.assertEqual(compute_metric("pe_ratio", evidence=[])["status"], "missing_input")
+        self.assertEqual(compute_metric("price_change", evidence=[])["status"], "missing_input")
+        self.assertEqual(compute_metric("market_cap_to_revenue", evidence=[])["status"], "missing_input")
+        self.assertEqual(compute_metric("price_change", evidence=[
+            {"kind": "market", "chunk_id": "X-MKT-H", "data": {"rows": [{"date": "d", "close": 1.0}]}},
+        ])["status"], "missing_input")
+
     def test_merge_evidence_keeps_tool_chunk_when_rag_fills_cap(self):
         # Mirrors the real executor flow: filing_rag/multi_company_compare puts its own chunks in
         # BOTH meta.context_chunks and the flat evidence list, so evidence contains 24 duplicates

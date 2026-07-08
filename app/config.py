@@ -56,6 +56,32 @@ COMPUTE_INTENT_RE = (
     r"margin|ratio|percentage|percent|growth|change)\b"
 )
 
+# --- V3: hybrid LLM router + valuation/explain-move/insight intents ---
+ROUTER_MODEL = os.getenv("FINSIGHT_ROUTER_MODEL", "claude-haiku-4-5")
+USE_LLM_ROUTER = os.getenv("FINSIGHT_USE_LLM_ROUTER", "1") == "1"
+ROUTER_MAX_TOKENS = 512
+ROUTER_CACHE_TTL_SECONDS = 300
+
+# Fires the LLM router for ambiguous mixed filing/market questions. Also split below into
+# per-intent regexes used by the deterministic fallback path (router disabled, or LLM/validation
+# failure) so both paths recognize the same vocabulary.
+VALUATION_INTENT_RE = (
+    r"\b(expensive|cheap|overvalued|undervalued|fairly\s+valued|valuation|"
+    r"p/e|pe\s+ratio|price.to.earnings|p/s|price.to.sales|worth\s+buying)\b"
+)
+EXPLAIN_MOVE_INTENT_RE = (
+    r"\b(why\s+(is|did|has|was)|what('s| is)\s+(behind|driving)|explain)\b"
+    r".{0,60}\b(down|up|drop(ped)?|fell|fall(en)?|declin(e|ed|ing)|rall(y|ied)|surge[ds]?|"
+    r"jump(ed)?|spike[ds]?|slid(e)?|sank|mov(e|ed|ing)|sell.?off)\b"
+)
+INSIGHT_INTENT_RE = r"\b(insight\s+brief|company\s+brief|full\s+(picture|brief|report)|deep\s+dive|snapshot)\b"
+LLM_ROUTER_TRIGGER_RE = "|".join(
+    (VALUATION_INTENT_RE, EXPLAIN_MOVE_INTENT_RE, INSIGHT_INTENT_RE)
+)
+
+INSIGHT_HISTORY_PERIOD = "3mo"     # trend window for the insight brief
+VALUATION_FACT_METRICS = ["revenue", "net_income", "eps_diluted"]  # facts_lookup inputs for valuation plans
+
 # --- Screener (V2) ---
 # Ordered: first match wins. Checked BEFORE the more general COMPUTE_INTENT_RE-driven
 # compute_metric path so "operating margin" etc. route to the multi-company screen_companies
