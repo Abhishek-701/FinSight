@@ -71,12 +71,29 @@ def _refusal(reason: str, msg: str, meta: dict) -> dict:
             "refusal_reason": reason, **meta}
 
 
+def _offer_ingest(ticker: str, meta: dict) -> dict:
+    """A real, not-yet-ingested ticker (router.py mode="needs_ingest") gets an actionable offer
+    instead of a flat refusal. `action`/`ticker` are machine-readable for the frontend to render
+    an "Add <ticker>" chip that kicks off POST /api/companies/{ticker}/ingest (V4.1b endpoints).
+    """
+    msg = (
+        f"{ticker} isn't in my filing corpus yet. I can fetch its latest 10-K from SEC EDGAR "
+        "and add it — this usually takes under a minute."
+    )
+    return {
+        "answer": msg, "citations": [], "gaps": [], "refused": True,
+        "refusal_reason": "needs_ingest", "action": "offer_ingest", "ticker": ticker, **meta,
+    }
+
+
 def _elapsed(start: float) -> int:
     return round((time.perf_counter() - start) * 1000)
 
 
 def _rag_tool_name(route: dict) -> str:
     if route["mode"] == "clarify":
+        return "refuse_or_clarify"
+    if route["mode"] == "needs_ingest":
         return "refuse_or_clarify"
     if route["mode"] == "decompose":
         return "multi_company_compare"
@@ -228,6 +245,9 @@ def prepare(question: str, route: dict | None = None) -> dict:
 
     if mode == "clarify":
         return _refusal("clarify", CLARIFY_MSG, meta)
+
+    if mode == "needs_ingest":
+        return _offer_ingest(route["ticker"], meta)
 
     if mode == "decompose":
         subs = decompose.decompose(question, tickers)

@@ -66,14 +66,17 @@ def _load_specs() -> dict[str, ToolSpec]:
         ToolSpec(
             "market_quote",
             "Fetch latest live/delayed quote data (price, market cap, change) for one ticker.",
+            # Unconstrained: yfinance serves any US ticker regardless of our filing corpus,
+            # and the handler already fails gracefully (status: error) on a bad symbol — no
+            # need to gate this on the ingested-company enum like the filing-grounded tools.
             market.market_quote,
-            arg_spec={"ticker": tickers},
+            arg_spec={"ticker": "*"},
         ),
         ToolSpec(
             "market_history",
             "Fetch recent OHLCV price history for one ticker over a period.",
             market.market_history,
-            arg_spec={"ticker": tickers, "period": list(config.MARKET_HISTORY_PERIODS)},
+            arg_spec={"ticker": "*", "period": list(config.MARKET_HISTORY_PERIODS)},
         ),
         ToolSpec(
             "compute_metric",

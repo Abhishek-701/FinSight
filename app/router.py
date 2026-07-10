@@ -1,11 +1,13 @@
 """Phase 3 — regex/alias router (no LLM, for explainability + determinism; see DECISIONS.md).
 
 Decides how a question is handled:
-  - >=1 of our six companies named   -> "single" (1) or "decompose" (2+), filtered retrieval
-  - 0 named + superlative wording     -> "decompose" over all six
-  - 0 named + a specific OTHER entity -> "oos" (out-of-corpus): retrieve unfiltered, let the
-                                          dense-similarity threshold gate decide (e.g. "Tesla's revenue")
-  - 0 named + nothing specific        -> "clarify": ask for the company, do not guess
+  - >=1 active company named          -> "single" (1) or "decompose" (2+), filtered retrieval
+  - 0 named + superlative wording      -> "decompose" over all active companies
+  - 0 named + a real, not-yet-ingested
+    ticker/cashtag (e.g. "TSLA", "$TSLA") -> "needs_ingest": offer to ingest it (V4.1)
+  - 0 named + a specific OTHER entity  -> "oos" (out-of-corpus): retrieve unfiltered, let the
+                                          dense-similarity threshold gate decide (e.g. "France's GDP")
+  - 0 named + nothing specific         -> "clarify": ask for the company, do not guess
 """
 
 import re
@@ -60,5 +62,11 @@ def route(question: str) -> dict:
     if SUPERLATIVE_RE.search(question):
         return {"mode": "decompose", "tickers": universe.active_tickers()}  # compare across all active
     if has_other_named_entity(question):
+        # A real ticker/cashtag we haven't ingested yet ("TSLA", "$TSLA") gets an ingest offer
+        # instead of a flat refusal; resolve_ticker() only matches symbols (not casual company
+        # names like "Tesla") in chat and never raises (EDGAR-down degrades to oos, not a 500).
+        resolved = universe.resolve_ticker(question)
+        if resolved and not resolved["ingested"]:
+            return {"mode": "needs_ingest", "tickers": [], "ticker": resolved["ticker"]}
         return {"mode": "oos", "tickers": []}  # specific but out-of-corpus -> threshold gate
     return {"mode": "clarify", "tickers": []}  # no company, no superlative -> ask, don't guess

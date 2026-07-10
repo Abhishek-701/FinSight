@@ -23,6 +23,8 @@ def _matches(pattern: str, question: str) -> bool:
 
 def _mentioned_tickers(question: str, route: dict) -> list[str]:
     tickers = list(route.get("tickers", []))
+    if route.get("mode") == "needs_ingest" and route.get("ticker"):
+        tickers.append(route["ticker"])  # not in our corpus yet, but yfinance can quote it now
     low = question.lower()
     for alias, ticker in universe.aliases().items():
         if re.search(rf"\b{re.escape(alias)}\b", low) and ticker not in tickers:
@@ -131,6 +133,14 @@ def route_tools(question: str, route: dict | None = None, metrics: list[str] | N
     if route["mode"] == "oos" and not market:
         return {**base, "strategy": "deterministic",
                 "actions": [{"tool": "filing_rag", "reason": "out_of_corpus_probe"}]}
+    if route["mode"] == "needs_ingest" and not market:
+        # A real, not-yet-ingested ticker and no market intent -> the question needs the filing
+        # corpus (facts/RAG), which we don't have for it yet. Offer to ingest instead of
+        # refusing outright or running a wasted RAG probe (app.research._offer_ingest handles
+        # this reason). If market intent IS present, fall through below: market_quote/history
+        # work for any ticker without ingestion (registry.py's ticker arg_spec is unconstrained).
+        return {**base, "strategy": "deterministic",
+                "actions": [{"tool": "refuse_or_clarify", "reason": "needs_ingest"}]}
 
     # Segment and screener-superlative questions have unambiguous deterministic handling below
     # (the original generic branch) — never worth an LLM call, and screen already resolves the

@@ -15,14 +15,11 @@ file (20-F foreign filers, ETFs, SPACs), filing too large for the RAM budget.
 from __future__ import annotations
 
 import json
-import time
-import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Callable
 
-from app import config, facts as facts_mod, retrieve
+from app import config, facts as facts_mod, retrieve, universe
 from ingest import chunk as chunk_mod
 from ingest import download
 from ingest import parse as parse_mod
@@ -54,35 +51,14 @@ def _noop_progress(stage: str, pct: float) -> None:
     pass
 
 
-def _cik_map_is_fresh(path: Path) -> bool:
-    if not path.exists():
-        return False
-    age_seconds = time.time() - path.stat().st_mtime
-    return age_seconds < config.CIK_MAP_TTL_HOURS * 3600
-
-
-def _load_cik_map(force_refresh: bool = False) -> dict[str, str]:
-    """Ticker -> CIK, cached on disk (EDGAR's map rarely changes; avoid refetching it
-    on every single-ticker ingest)."""
-    path = config.DYNAMIC_CIK_MAP_PATH
-    if not force_refresh and _cik_map_is_fresh(path):
-        return json.loads(path.read_text(encoding="utf-8"))
-    cik_map = download.load_cik_map()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(cik_map), encoding="utf-8")
-    return cik_map
-
-
 def resolve_cik(ticker: str) -> str:
-    """Look up a ticker's CIK, refreshing the cached map once if it's a cache miss
-    (covers newly-listed tickers since our cache was built)."""
+    """Look up a ticker's CIK via the shared disk-cached EDGAR map (app.universe.lookup_cik,
+    also used by resolve_ticker() to check unrecognized entities without ingesting them)."""
     ticker = ticker.upper()
-    cik_map = _load_cik_map()
-    if ticker not in cik_map:
-        cik_map = _load_cik_map(force_refresh=True)
-    if ticker not in cik_map:
+    cik = universe.lookup_cik(ticker)
+    if cik is None:
         raise IngestError("ticker_not_found", f"{ticker} is not a registered SEC EDGAR ticker")
-    return cik_map[ticker]
+    return cik
 
 
 def _embed_and_add(chunks: list[dict]) -> None:

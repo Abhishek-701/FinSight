@@ -141,8 +141,13 @@ class LlmRouterTests(unittest.TestCase):
         self.assertEqual(plan["strategy"], "deterministic")
 
     def test_invalid_enum_value_falls_back(self):
+        # market_quote's ticker is intentionally unconstrained (V4.1: yfinance serves any
+        # ticker regardless of filing coverage), so use a field that's still enum-validated —
+        # market_history's period — to exercise the invalid-value fallback path.
         question = "Is NVDA's P/E ratio too high?"
-        raw = {"intent": "valuation", "actions": [_null_action(tool="market_quote", ticker="NOT_A_TICKER")]}
+        raw = {"intent": "valuation", "actions": [
+            _null_action(tool="market_history", ticker="NVDA", period="10years"),
+        ]}
         with patch("app.agent.router_plan.llm_route", return_value=raw):
             plan = research.plan(question, router.route(question))
         self.assertEqual(plan["strategy"], "deterministic")

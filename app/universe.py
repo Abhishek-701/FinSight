@@ -10,8 +10,15 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
 from app import config
+
+_CASHTAG_RE = re.compile(r"\$([A-Za-z]{1,5})\b")
+# A bare uppercase token, 1-5 letters — candidate ticker symbol. Matched against the ORIGINAL
+# (not lowercased) question text so casual lowercase words ("cat", "it", "a") never misfire;
+# real tickers are conventionally written in caps ("Is CAT expensive?").
+_UPPER_TOKEN_RE = re.compile(r"\b([A-Z]{1,5})\b")
 
 # EDGAR's `name` field is the full legal entity name (e.g. "Tesla, Inc.", "NVIDIA CORP"),
 # which casual references never use ("Tesla", "NVIDIA"). Strip common corporate suffixes so
@@ -83,3 +90,82 @@ def is_ingested(ticker: str) -> bool:
 def company_name(ticker: str) -> str:
     """Best-effort display name; falls back to the ticker itself if unknown."""
     return active_companies().get(ticker.upper(), ticker.upper())
+
+
+def _cik_map_is_fresh(path) -> bool:
+    if not path.exists():
+        return False
+    return (time.time() - path.stat().st_mtime) < config.CIK_MAP_TTL_HOURS * 3600
+
+
+# (path_str, mtime, data) — process-lifetime cache so a hot path like resolve_ticker() (called
+# from router.route() on any question naming an unrecognized entity) doesn't re-parse the ~1MB/
+# 13k-entry EDGAR ticker map from disk on every single request; only on the first request after
+# the on-disk file actually changes.
+_cik_map_cache: tuple[str, float, dict] | None = None
+
+
+def load_cik_map(force_refresh: bool = False) -> dict[str, str]:
+    """Ticker -> CIK, disk- and memory-cached (EDGAR's own map is ~5MB and rarely changes).
+    Shared by ingest.pipeline (actual ingest) and resolve_ticker() below (checking whether an
+    unrecognized entity is a real, not-yet-ingested ticker) so both stay in sync off one file.
+    """
+    global _cik_map_cache
+    from ingest import download  # local import: keeps this module's default import surface light
+
+    path = config.DYNAMIC_CIK_MAP_PATH
+    if not force_refresh and _cik_map_is_fresh(path):
+        mtime = path.stat().st_mtime
+        if _cik_map_cache and _cik_map_cache[:2] == (str(path), mtime):
+            return _cik_map_cache[2]
+        data = json.loads(path.read_text(encoding="utf-8"))
+        _cik_map_cache = (str(path), mtime, data)
+        return data
+    cik_map = download.load_cik_map()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(cik_map), encoding="utf-8")
+    _cik_map_cache = (str(path), path.stat().st_mtime, cik_map)
+    return cik_map
+
+
+def lookup_cik(ticker: str) -> str | None:
+    """CIK for `ticker`, or None if EDGAR has no such ticker. Refreshes the cache once on a
+    miss (covers a ticker newly listed since our cache was last built)."""
+    ticker = ticker.upper()
+    cik_map = load_cik_map()
+    if ticker not in cik_map:
+        cik_map = load_cik_map(force_refresh=True)
+    return cik_map.get(ticker)
+
+
+def resolve_ticker(text: str) -> dict | None:
+    """Best-effort resolution of a candidate ticker/company mentioned in `text` against the
+    FULL EDGAR ticker universe (not just active/ingested companies) — used by router.py to
+    tell "a real company we haven't ingested yet" (offer to ingest) from "not a real entity"
+    (out-of-corpus refusal).
+
+    Returns {"ticker", "cik", "ingested"} for the first plausible match, or None. Checks
+    aliases()/active_companies() first so an already-known company never triggers a network
+    call. Candidates are tried in order: a $CASHTAG, then a bare uppercase 1-5 letter token
+    (case-sensitive — "cat"/"it"/"a" in lowercase prose never match).
+    """
+    known = aliases()
+    low = text.lower()
+    for alias, ticker in known.items():
+        if re.search(rf"\b{re.escape(alias)}\b", low):
+            return {"ticker": ticker, "cik": None, "ingested": True}
+
+    candidates = [m.group(1).upper() for m in _CASHTAG_RE.finditer(text)]
+    candidates += [m.group(1) for m in _UPPER_TOKEN_RE.finditer(text)]
+    if not candidates:
+        return None
+
+    try:
+        cik_map = load_cik_map()
+    except Exception:  # noqa: BLE001 - EDGAR/network failure must not break routing; fall back to oos
+        return None
+    for candidate in candidates:
+        cik = cik_map.get(candidate)
+        if cik:
+            return {"ticker": candidate, "cik": cik, "ingested": is_ingested(candidate)}
+    return None
