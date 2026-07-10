@@ -58,6 +58,8 @@ def route(question: str) -> dict:
     tickers = detect_companies(question)
     if tickers:
         mode = "single" if len(tickers) == 1 else "decompose"
+        for ticker in tickers:
+            universe.touch_ticker(ticker)  # LRU signal for eviction; no-op for seeds
         return {"mode": mode, "tickers": tickers}
     if SUPERLATIVE_RE.search(question):
         return {"mode": "decompose", "tickers": universe.active_tickers()}  # compare across all active

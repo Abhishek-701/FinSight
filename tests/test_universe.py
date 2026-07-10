@@ -74,6 +74,77 @@ class UniverseDynamicMergeTests(unittest.TestCase):
         self.assertEqual(universe.company_name("TSLA"), "Tesla")
 
 
+class RegistryMutationTests(unittest.TestCase):
+    """register_ticker / touch_ticker / least_recently_used_dynamic_ticker / evict_ticker."""
+
+    def setUp(self):
+        self._orig_registry = config.DYNAMIC_REGISTRY_PATH
+        self._orig_chunks_dir = config.DYNAMIC_CHUNKS_DIR
+        self._orig_facts_dir = config.DYNAMIC_FACTS_DIR
+        self._tmpdir = tempfile.TemporaryDirectory()
+        base = Path(self._tmpdir.name)
+        config.DYNAMIC_REGISTRY_PATH = base / "registry.json"
+        config.DYNAMIC_CHUNKS_DIR = base / "chunks"
+        config.DYNAMIC_FACTS_DIR = base / "facts"
+        config.DYNAMIC_CHUNKS_DIR.mkdir()
+        config.DYNAMIC_FACTS_DIR.mkdir()
+
+    def tearDown(self):
+        config.DYNAMIC_REGISTRY_PATH = self._orig_registry
+        config.DYNAMIC_CHUNKS_DIR = self._orig_chunks_dir
+        config.DYNAMIC_FACTS_DIR = self._orig_facts_dir
+        self._tmpdir.cleanup()
+
+    def test_register_ticker_writes_entry(self):
+        universe.register_ticker("TSLA", {"name": "Tesla, Inc.", "last_used_at": "2026-01-01T00:00:00+00:00"})
+        self.assertEqual(universe.active_companies()["TSLA"], "Tesla")
+
+    def test_touch_ticker_bumps_last_used_at(self):
+        universe.register_ticker("TSLA", {"name": "Tesla, Inc.", "last_used_at": "2026-01-01T00:00:00+00:00"})
+        universe.touch_ticker("TSLA")
+        registry = json.loads(config.DYNAMIC_REGISTRY_PATH.read_text(encoding="utf-8"))
+        self.assertGreater(registry["TSLA"]["last_used_at"], "2026-01-01T00:00:00+00:00")
+
+    def test_touch_ticker_is_noop_for_seed(self):
+        universe.touch_ticker("AAPL")
+        self.assertFalse(config.DYNAMIC_REGISTRY_PATH.exists())  # never wrote a registry file
+
+    def test_touch_ticker_is_noop_for_unregistered_ticker(self):
+        universe.touch_ticker("RIVN")
+        self.assertFalse(config.DYNAMIC_REGISTRY_PATH.exists())
+
+    def test_least_recently_used_picks_oldest(self):
+        universe.register_ticker("TSLA", {"name": "Tesla", "last_used_at": "2026-01-01T00:00:00+00:00"})
+        universe.register_ticker("RIVN", {"name": "Rivian", "last_used_at": "2026-03-01T00:00:00+00:00"})
+        self.assertEqual(universe.least_recently_used_dynamic_ticker(), "TSLA")
+
+    def test_least_recently_used_none_when_empty(self):
+        self.assertIsNone(universe.least_recently_used_dynamic_ticker())
+
+    @patch("app.retrieve.invalidate")
+    @patch("app.facts.invalidate")
+    def test_evict_ticker_removes_files_and_registry_entry(self, mock_facts_invalidate, mock_retrieve_invalidate):
+        universe.register_ticker("TSLA", {"name": "Tesla", "last_used_at": "2026-01-01T00:00:00+00:00"})
+        (config.DYNAMIC_CHUNKS_DIR / "TSLA.json").write_text("[]", encoding="utf-8")
+        (config.DYNAMIC_FACTS_DIR / "TSLA.json").write_text("[]", encoding="utf-8")
+
+        with patch("chromadb.PersistentClient") as mock_client_cls:
+            mock_coll = mock_client_cls.return_value.get_collection.return_value
+            universe.evict_ticker("TSLA")
+            mock_coll.delete.assert_called_once_with(where={"ticker": "TSLA"})
+
+        self.assertNotIn("TSLA", universe.active_companies())
+        self.assertFalse((config.DYNAMIC_CHUNKS_DIR / "TSLA.json").exists())
+        self.assertFalse((config.DYNAMIC_FACTS_DIR / "TSLA.json").exists())
+        mock_retrieve_invalidate.assert_called_once()
+        mock_facts_invalidate.assert_called_once()
+
+    def test_evict_ticker_on_unregistered_ticker_is_a_noop(self):
+        with patch("chromadb.PersistentClient") as mock_client_cls:
+            universe.evict_ticker("NOPE")
+            mock_client_cls.assert_not_called()
+
+
 class UniverseMalformedRegistryTests(unittest.TestCase):
     """A corrupt registry file degrades to seed-only rather than raising."""
 

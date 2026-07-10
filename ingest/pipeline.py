@@ -90,19 +90,9 @@ def _embed_and_add(chunks: list[dict]) -> None:
         )
 
 
-def _update_registry(ticker: str, company: str, cik: str, meta: dict, chunk_count: int) -> None:
-    """Registry write is the LAST step (after chunks/facts are on disk and Chroma/BM25/facts
-    caches are invalidated) so nothing can route to this ticker before its data is ready."""
-    path = config.DYNAMIC_REGISTRY_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
-    registry: dict = {}
-    if path.exists():
-        try:
-            registry = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            registry = {}
+def _registry_entry(company: str, cik: str, meta: dict, chunk_count: int) -> dict:
     now = datetime.now(UTC).replace(microsecond=0).isoformat()
-    registry[ticker] = {
+    return {
         "name": company,
         "cik": cik,
         "accession": meta["accession"],
@@ -111,7 +101,6 @@ def _update_registry(ticker: str, company: str, cik: str, meta: dict, chunk_coun
         "last_used_at": now,
         "chunk_count": chunk_count,
     }
-    path.write_text(json.dumps(registry, indent=2), encoding="utf-8")
 
 
 def ingest_ticker(ticker: str, progress: ProgressCallback = _noop_progress) -> IngestResult:
@@ -164,7 +153,7 @@ def ingest_ticker(ticker: str, progress: ProgressCallback = _noop_progress) -> I
 
     retrieve.invalidate()
     facts_mod.invalidate()
-    _update_registry(ticker, company_name, cik, meta, len(chunks))
+    universe.register_ticker(ticker, _registry_entry(company_name, cik, meta, len(chunks)))
 
     progress("done", 1.0)
     return IngestResult(

@@ -133,9 +133,11 @@ DYNAMIC_CHUNKS_DIR = DYNAMIC_DIR / "chunks"
 DYNAMIC_FACTS_DIR = DYNAMIC_DIR / "facts"
 DYNAMIC_CIK_MAP_PATH = DYNAMIC_DIR / "cik_map.json"
 
-# --- On-demand ingest (V4.1: ingest/pipeline.py) ---
+# --- On-demand ingest (V4.1: ingest/pipeline.py, app/ingest_jobs.py) ---
 CIK_MAP_TTL_HOURS = 24
 INGEST_MAX_RAW_MB = 30  # reject filings above this size (protects the 512MB deploy RAM ceiling)
+INGEST_MAX_CONCURRENT = 1  # one parse+embed at a time — non-negotiable at 512MB deploy RAM
+UNIVERSE_MAX_DYNAMIC = 12  # LRU-evict the least-recently-used dynamic company beyond this
 
 # --- XBRL fact store ---
 FACTS_PATH = _ROOT / "data" / "facts.json"

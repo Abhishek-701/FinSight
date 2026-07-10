@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import audit, config, corpus, insight, portfolio, research, screener, universe, watchlist
+from app import audit, config, corpus, ingest_jobs, insight, portfolio, research, screener, universe, watchlist
 from app.agent import session
 from app.agent.context import from_history
 from app.tools import market
@@ -294,6 +294,87 @@ def insight_brief_stream(ticker: str, request: Request, x_api_key: str | None = 
     if not universe.is_ingested(ticker):
         raise HTTPException(status_code=400, detail="unsupported_ticker")
     return StreamingResponse(insight.stream_brief(ticker), media_type="text/event-stream")
+
+
+@app.post("/api/companies/{ticker}/ingest")
+def start_company_ingest(ticker: str, request: Request, x_api_key: str | None = Header(default=None)):
+    """Kick off (or dedupe into) an on-demand ingest job for a not-yet-covered ticker.
+
+    Async: returns immediately with a job snapshot; poll .../ingest/status or subscribe to
+    .../ingest/stream for progress. 200 if the ticker is already ingested (no job started).
+    """
+    _guard(request, x_api_key)
+    ticker = ticker.upper()
+    if universe.is_ingested(ticker):
+        return {"status": "already_ingested", "job": None}
+    job = ingest_jobs.start_ingest(ticker)
+    return {"status": job["status"], "job": job}
+
+
+@app.get("/api/companies/{ticker}/ingest/status")
+def company_ingest_status(ticker: str, request: Request, x_api_key: str | None = Header(default=None)):
+    _guard(request, x_api_key)
+    ticker = ticker.upper()
+    job = ingest_jobs.get_job(ticker)
+    if job is None:
+        if universe.is_ingested(ticker):
+            return {"status": "already_ingested", "job": None}
+        raise HTTPException(status_code=404, detail="no_ingest_job")
+    return {"status": job["status"], "job": job}
+
+
+@app.get("/api/companies/{ticker}/ingest/stream")
+def company_ingest_stream(ticker: str, request: Request, x_api_key: str | None = Header(default=None)):
+    """SSE progress stream for an in-flight (or just-started) ingest job. Same wire format
+    (`research.sse`) as /api/insight/{ticker}/stream, so the frontend reuses one SSE parser."""
+    _guard(request, x_api_key)
+    ticker = ticker.upper()
+
+    def events():
+        if universe.is_ingested(ticker):
+            yield research.sse("done", {"status": "already_ingested"})
+            return
+        job = ingest_jobs.get_job(ticker) or ingest_jobs.start_ingest(ticker)
+        last_sent = None
+        while True:
+            job = ingest_jobs.get_job(ticker)
+            snapshot = (job["status"], job.get("stage"), job.get("pct"))
+            if snapshot != last_sent:
+                yield research.sse("progress", {
+                    "status": job["status"], "stage": job.get("stage"), "pct": job.get("pct"),
+                })
+                last_sent = snapshot
+            if job["status"] == "done":
+                yield research.sse("done", {"status": "done", "result": job.get("result")})
+                return
+            if job["status"] == "error":
+                yield research.sse("done", {"status": "error", "error": job.get("error")})
+                return
+            time.sleep(0.3)
+
+    return StreamingResponse(events(), media_type="text/event-stream")
+
+
+@app.get("/api/universe/resolve")
+def universe_resolve(q: str, request: Request, x_api_key: str | None = Header(default=None)):
+    """Resolve a ticker symbol or $cashtag against the full EDGAR universe (not just what
+    we've ingested) — powers "is this a real company I can add?" before offering to ingest.
+
+    Matches ticker symbols/cashtags only, same as the chat-path resolver (app.universe.
+    resolve_ticker); free-text company-name search ("rivian" -> RIVN) isn't supported yet —
+    EDGAR's ticker map is cached as ticker->CIK only, without company titles.
+    """
+    _guard(request, x_api_key)
+    resolved = universe.resolve_ticker(q)
+    if resolved is None:
+        raise HTTPException(status_code=404, detail="not_found")
+    ticker = resolved["ticker"]
+    return {
+        "ticker": ticker,
+        "name": universe.company_name(ticker) if resolved["ingested"] else ticker,
+        "cik": resolved["cik"],
+        "ingested": resolved["ingested"],
+    }
 
 
 @app.get("/api/corpus/status")

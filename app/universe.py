@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from datetime import UTC, datetime
 
 from app import config
 
@@ -90,6 +91,75 @@ def is_ingested(ticker: str) -> bool:
 def company_name(ticker: str) -> str:
     """Best-effort display name; falls back to the ticker itself if unknown."""
     return active_companies().get(ticker.upper(), ticker.upper())
+
+
+def _write_dynamic(registry: dict[str, dict]) -> None:
+    path = config.DYNAMIC_REGISTRY_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(registry, indent=2), encoding="utf-8")
+
+
+def register_ticker(ticker: str, entry: dict) -> None:
+    """Write/overwrite one ticker's registry entry. Called as the LAST step of an ingest
+    (ingest.pipeline) so nothing can observe the ticker as ingested before its data is ready."""
+    ticker = ticker.upper()
+    registry = _load_dynamic()
+    registry[ticker] = entry
+    _write_dynamic(registry)
+
+
+def touch_ticker(ticker: str) -> None:
+    """Bump last_used_at for a dynamic company — the LRU signal for eviction. No-op for seeds
+    (never evicted) or for a ticker not (yet) in the registry."""
+    ticker = ticker.upper()
+    if ticker in config.COMPANIES:
+        return
+    registry = _load_dynamic()
+    if ticker not in registry:
+        return
+    registry[ticker]["last_used_at"] = datetime.now(UTC).replace(microsecond=0).isoformat()
+    _write_dynamic(registry)
+
+
+def least_recently_used_dynamic_ticker() -> str | None:
+    """The dynamic ticker with the oldest last_used_at (falls back to ingested_at), or None if
+    there are no dynamic companies. Used by app.ingest_jobs to pick an eviction target."""
+    registry = _load_dynamic()
+    if not registry:
+        return None
+    return min(
+        registry, key=lambda t: registry[t].get("last_used_at") or registry[t].get("ingested_at", "")
+    )
+
+
+def evict_ticker(ticker: str) -> None:
+    """Remove a dynamic company's registry entry, chunk/fact files, and Chroma vectors, then
+    invalidate the retrieve/facts caches. Never call this on a seed — it only touches the
+    dynamic registry, so seeds are structurally safe from it regardless."""
+    from app import facts as facts_mod, retrieve
+
+    ticker = ticker.upper()
+    registry = _load_dynamic()
+    if ticker not in registry:
+        return
+
+    try:
+        import chromadb
+
+        client = chromadb.PersistentClient(path=config.CHROMA_DIR)
+        coll = client.get_collection(config.COLLECTION)
+        coll.delete(where={"ticker": ticker})
+    except Exception:  # noqa: BLE001 - eviction must not crash if Chroma is briefly unavailable
+        pass
+
+    (config.DYNAMIC_CHUNKS_DIR / f"{ticker}.json").unlink(missing_ok=True)
+    (config.DYNAMIC_FACTS_DIR / f"{ticker}.json").unlink(missing_ok=True)
+
+    registry.pop(ticker, None)
+    _write_dynamic(registry)
+
+    retrieve.invalidate()
+    facts_mod.invalidate()
 
 
 def _cik_map_is_fresh(path) -> bool:
