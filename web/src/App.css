@@ -205,3 +205,20 @@ input:focus { border-color: #b9dec4; box-shadow: 0 0 0 4px rgba(12, 166, 120, 0.
 .trace-chip { font-size: 11px; color: #5a554c; background: #f1ebe0; border-radius: 999px; padding: 3px 9px; }
 .trace-ms { color: var(--muted); }
 .watchlist-info-btn { border: 0; background: transparent; cursor: pointer; text-align: left; padding: 0; }
+
+/* Ticker Search / On-Demand Ingest */
+.ticker-search { position: relative; }
+.ticker-search input { width: 100%; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 9px 11px; }
+.ticker-search-results { position: absolute; z-index: 5; top: 100%; left: 0; right: 0; margin-top: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); max-height: 260px; overflow-y: auto; padding: 6px; }
+.ticker-search-empty { padding: 10px 8px; }
+.ticker-search-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 8px; border-radius: 8px; }
+.ticker-search-row:hover { background: #f6f4ef; }
+.ticker-search-row-name { display: flex; flex-direction: column; min-width: 0; }
+.ticker-search-row-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+.ticker-search-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--green-dark); background: #e8f6ed; border-radius: 999px; padding: 2px 8px; font-weight: 800; }
+.ingest-progress { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; }
+.ingest-bar { flex: 1; height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.ingest-bar-fill { height: 100%; background: var(--green); transition: width 0.3s; }
+.ingest-error { color: var(--red); }
+.ingest-done { color: var(--green-dark); font-weight: 700; }
+.ingest-offer { margin-top: 12px; }

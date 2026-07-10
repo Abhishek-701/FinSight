@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import ChatView from './components/ChatView'
 import Composer from './components/Composer'
@@ -20,11 +20,22 @@ function App() {
   const [compareTickers, setCompareTickers] = useState<string[]>([])
   const [insightTicker, setInsightTicker] = useState<string | null>(null)
 
-  useEffect(() => {
+  const refreshCompanies = useCallback(() => {
     getCompanies()
-      .then((res) => setCompanies(res.companies))
+      .then((res) => {
+        setCompanies(res.companies)
+        setOnline(true)
+      })
       .catch(() => setOnline(false))
   }, [])
+
+  useEffect(() => {
+    refreshCompanies()
+  }, [refreshCompanies])
+
+  function handleCompanyAdded() {
+    refreshCompanies()
+  }
 
   function handleNewChat() {
     setView('chat')
@@ -61,6 +72,7 @@ function App() {
         onNewChat={handleNewChat}
         onSwitchChat={switchChat}
         onRecentClick={ask}
+        onCompanyAdded={handleCompanyAdded}
       />
       <main className="main">
         <header className="topbar">
@@ -74,7 +86,7 @@ function App() {
           </div>
         </header>
         <section className="workspace">
-          {view === 'chat' && <ChatView turns={turns} />}
+          {view === 'chat' && <ChatView turns={turns} onAsk={ask} />}
           {view === 'screener' && <ScreenerView onCompare={handleCompare} onInsight={handleInsight} />}
           {view === 'compare' && <CompareView tickers={compareTickers} />}
           {view === 'portfolio' && <PortfolioView companies={companies} />}

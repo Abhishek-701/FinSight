@@ -3,10 +3,13 @@ import type {
   HistoryPeriod,
   HistoryResult,
   InsightBrief,
+  IngestJob,
   PortfolioResponse,
   QuoteResult,
   ScreenerResponse,
   SessionMessage,
+  UniverseResolveResult,
+  UniverseSearchResult,
   WatchlistItem,
 } from './types'
 
@@ -79,6 +82,27 @@ export function getSession(sessionId: string): Promise<{ session_id: string; mes
 
 export function getCompanies(): Promise<{ companies: Record<string, string> }> {
   return jsonFetch('/api/companies')
+}
+
+export function searchCompanies(q: string): Promise<{ results: UniverseSearchResult[] }> {
+  return jsonFetch(`/api/universe/search?q=${encodeURIComponent(q)}`)
+}
+
+export function resolveTicker(q: string): Promise<UniverseResolveResult> {
+  return jsonFetch(`/api/universe/resolve?q=${encodeURIComponent(q)}`)
+}
+
+export function startIngest(ticker: string): Promise<{ status: string; job: IngestJob | null }> {
+  return jsonFetch(`/api/companies/${encodeURIComponent(ticker)}/ingest`, { method: 'POST' })
+}
+
+export function getIngestStatus(ticker: string): Promise<{ status: string; job: IngestJob | null }> {
+  return jsonFetch(`/api/companies/${encodeURIComponent(ticker)}/ingest/status`)
+}
+
+export async function* streamIngest(ticker: string): AsyncGenerator<SseEvent> {
+  const res = await fetch(`/api/companies/${encodeURIComponent(ticker)}/ingest/stream`)
+  yield* parseSse(res)
 }
 
 export function getWatchlist(clientId: string): Promise<{ client_id: string; items: WatchlistItem[] }> {

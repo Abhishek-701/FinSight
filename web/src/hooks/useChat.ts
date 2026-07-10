@@ -11,6 +11,7 @@ export interface ChatTurn {
   refused?: boolean
   toolCalls?: ToolCallSummary[]
   plan?: PlanSummary
+  needsIngestTicker?: string | null
 }
 
 export interface ChatWindow {
@@ -113,10 +114,20 @@ export function useChat() {
             const refused = Boolean(evt.data.refused)
             const toolCalls = (evt.data.tool_calls as ToolCallSummary[]) || []
             const plan = (evt.data.plan as PlanSummary) || undefined
+            const needsIngestTicker =
+              evt.data.action === 'offer_ingest' ? (evt.data.ticker as string) : null
             setTurns((prev) => {
               const next = [...prev]
               const last = next[next.length - 1]
-              const finished = { ...last, citationDetails, refused, toolCalls, plan, streaming: false }
+              const finished = {
+                ...last,
+                citationDetails,
+                refused,
+                toolCalls,
+                plan,
+                needsIngestTicker,
+                streaming: false,
+              }
               next[next.length - 1] = finished
               if (sid) {
                 localTurnsRef.current[sid] = [...(localTurnsRef.current[sid] || []), finished].slice(-20)

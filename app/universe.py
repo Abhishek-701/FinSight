@@ -284,6 +284,59 @@ def search_companies(query: str, limit: int = 8) -> list[dict]:
     ]
 
 
+# 1-3 consecutive Title-Case words, optional trailing possessive — a candidate company NAME
+# ("Palantir", "Coca Cola"), as opposed to _UPPER_TOKEN_RE which candidates a ticker SYMBOL.
+# Only ever checked for an EXACT casual-name match (see _short_name_index) — loose substring
+# matching against free-form prose would false-positive constantly ("Is it a good time..." has
+# plenty of capitalized sentence-starters that aren't company names).
+_NAME_CANDIDATE_RE = re.compile(r"\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,2})(?:'s)?\b")
+
+# (id(title_map_dict), index) — cheap invalidation: load_title_map() returns the SAME cached
+# dict object until it actually reloads from disk/network, so a change in id() means the
+# underlying data changed and this index must be rebuilt.
+_short_name_index_cache: tuple[int, dict[str, str]] | None = None
+
+
+def _short_name_index() -> dict[str, str]:
+    """Casual company name (lowercase) -> ticker, built once from load_title_map() and cached
+    until the title map itself reloads.
+
+    _short_name() only strips legal suffixes ("Inc.", "Corp."), not descriptive words — "Palantir
+    Technologies Inc." reduces to "Palantir Technologies", not "Palantir". So this indexes both
+    the full short name AND (for multi-word names) its first word alone, so "Palantir" still
+    resolves. Exact short-name matches are added first and win any collision; first-word entries
+    only fill gaps a full short name didn't already claim, e.g. a generic first word shared by
+    several companies won't clobber a company whose ENTIRE short name is that word.
+    """
+    global _short_name_index_cache
+    titles = load_title_map()
+    if _short_name_index_cache is not None and _short_name_index_cache[0] == id(titles):
+        return _short_name_index_cache[1]
+    index: dict[str, str] = {}
+    for ticker, title in titles.items():
+        index.setdefault(_short_name(title).lower(), ticker)
+    for ticker, title in titles.items():
+        words = _short_name(title).split()
+        if len(words) > 1:
+            index.setdefault(words[0].lower(), ticker)
+    _short_name_index_cache = (id(titles), index)
+    return index
+
+
+def _sub_phrases(phrase: str) -> list[str]:
+    """All contiguous word sub-phrases of `phrase`, longest first: "Is Rivian" -> ["Is Rivian",
+    "Is", "Rivian"]. _NAME_CANDIDATE_RE greedily grabs adjacent capitalized words together
+    (a sentence-initial "Is"/"What" right before the actual company name), so the company name
+    alone must still be tried once the full phrase doesn't match anything.
+    """
+    words = phrase.split()
+    return [
+        " ".join(words[start:start + length])
+        for length in range(len(words), 0, -1)
+        for start in range(len(words) - length + 1)
+    ]
+
+
 def resolve_ticker(text: str) -> dict | None:
     """Best-effort resolution of a candidate ticker/company mentioned in `text` against the
     FULL EDGAR ticker universe (not just active/ingested companies) — used by router.py to
@@ -292,8 +345,10 @@ def resolve_ticker(text: str) -> dict | None:
 
     Returns {"ticker", "cik", "ingested"} for the first plausible match, or None. Checks
     aliases()/active_companies() first so an already-known company never triggers a network
-    call. Candidates are tried in order: a $CASHTAG, then a bare uppercase 1-5 letter token
-    (case-sensitive — "cat"/"it"/"a" in lowercase prose never match).
+    call. Candidates are tried in order: a $CASHTAG, a bare uppercase 1-5 letter token
+    (case-sensitive — "cat"/"it"/"a" in lowercase prose never match), then an EXACT casual-name
+    match ("Palantir" -> PLTR) so a retail user asking about a company by name — not just its
+    ticker — still gets an ingest offer instead of a flat refusal.
     """
     known = aliases()
     low = text.lower()
@@ -303,15 +358,31 @@ def resolve_ticker(text: str) -> dict | None:
 
     candidates = [m.group(1).upper() for m in _CASHTAG_RE.finditer(text)]
     candidates += [m.group(1) for m in _UPPER_TOKEN_RE.finditer(text)]
-    if not candidates:
-        return None
+    if candidates:
+        try:
+            cik_map = load_cik_map()
+        except Exception:  # noqa: BLE001 - EDGAR/network failure must not break routing; fall back to oos
+            return None
+        for candidate in candidates:
+            cik = cik_map.get(candidate)
+            if cik:
+                return {"ticker": candidate, "cik": cik, "ingested": is_ingested(candidate)}
 
+    name_candidates = [m.group(1) for m in _NAME_CANDIDATE_RE.finditer(text)]
+    if not name_candidates:
+        return None
     try:
-        cik_map = load_cik_map()
+        index = _short_name_index()
     except Exception:  # noqa: BLE001 - EDGAR/network failure must not break routing; fall back to oos
         return None
-    for candidate in candidates:
-        cik = cik_map.get(candidate)
-        if cik:
-            return {"ticker": candidate, "cik": cik, "ingested": is_ingested(candidate)}
+    for candidate in name_candidates:
+        for phrase in _sub_phrases(candidate):
+            ticker = index.get(phrase.lower())
+            if ticker:
+                cik = None
+                try:
+                    cik = load_cik_map().get(ticker)
+                except Exception:  # noqa: BLE001 - cik is a display nicety here, not load-bearing
+                    pass
+                return {"ticker": ticker, "cik": cik, "ingested": is_ingested(ticker)}
     return None

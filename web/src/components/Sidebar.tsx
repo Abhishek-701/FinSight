@@ -1,6 +1,7 @@
 import type { ChatWindow } from '../hooks/useChat'
 import { titleFromQuestion } from '../lib/format'
 import type { View } from '../lib/types'
+import TickerSearch from './TickerSearch'
 
 interface Props {
   view: View
@@ -12,6 +13,7 @@ interface Props {
   onNewChat: () => void
   onSwitchChat: (id: string) => void
   onRecentClick: (q: string) => void
+  onCompanyAdded: (ticker: string) => void
 }
 
 const NAV_ITEMS: { view: View; label: string }[] = [
@@ -32,6 +34,7 @@ export default function Sidebar({
   onNewChat,
   onSwitchChat,
   onRecentClick,
+  onCompanyAdded,
 }: Props) {
   return (
     <aside className="sidebar">
@@ -54,6 +57,7 @@ export default function Sidebar({
           </button>
         ))}
       </nav>
+      <TickerSearch onAdded={onCompanyAdded} />
       {view === 'chat' && (
         <>
           <div>

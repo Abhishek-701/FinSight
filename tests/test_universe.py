@@ -169,13 +169,18 @@ class ResolveTickerTests(unittest.TestCase):
     def setUp(self):
         self._orig_registry = config.DYNAMIC_REGISTRY_PATH
         self._orig_cik_map = config.DYNAMIC_CIK_MAP_PATH
+        self._orig_title_map = config.DYNAMIC_TITLE_MAP_PATH
         self._tmpdir = tempfile.TemporaryDirectory()
         config.DYNAMIC_REGISTRY_PATH = Path(self._tmpdir.name) / "registry_missing.json"
         config.DYNAMIC_CIK_MAP_PATH = Path(self._tmpdir.name) / "cik_map.json"
+        config.DYNAMIC_TITLE_MAP_PATH = Path(self._tmpdir.name) / "title_map.json"
+        universe._short_name_index_cache = None
 
     def tearDown(self):
         config.DYNAMIC_REGISTRY_PATH = self._orig_registry
         config.DYNAMIC_CIK_MAP_PATH = self._orig_cik_map
+        config.DYNAMIC_TITLE_MAP_PATH = self._orig_title_map
+        universe._short_name_index_cache = None
         self._tmpdir.cleanup()
 
     def test_already_known_alias_resolves_without_network(self):
@@ -196,24 +201,58 @@ class ResolveTickerTests(unittest.TestCase):
         result = universe.resolve_ticker("What's happening with $TSLA?")
         self.assertEqual(result["ticker"], "TSLA")
 
+    @patch("ingest.download.load_ticker_titles")
     @patch("ingest.download.load_cik_map")
-    def test_lowercase_common_word_does_not_false_positive_as_ticker(self, mock_load):
+    def test_lowercase_common_word_does_not_false_positive_as_ticker(self, mock_load, mock_titles):
         # "IT" (Gartner) is a real ticker, but lowercase "it" in ordinary prose must not
         # match — the uppercase-token check is case-sensitive against the ORIGINAL text.
+        # "Is" (sentence-capitalized) falls to the name-candidate tier but matches no title.
         mock_load.return_value = {"IT": "0000749251"}
+        mock_titles.return_value = {"IT": "Gartner, Inc.", "TSLA": "Tesla, Inc."}
         result = universe.resolve_ticker("Is it a good time to invest?")
         self.assertIsNone(result)
 
+    @patch("ingest.download.load_ticker_titles")
     @patch("ingest.download.load_cik_map")
-    def test_unrecognized_text_returns_none(self, mock_load):
+    def test_unrecognized_text_returns_none(self, mock_load, mock_titles):
         mock_load.return_value = {"TSLA": "0001318605"}
+        mock_titles.return_value = {"TSLA": "Tesla, Inc."}
         result = universe.resolve_ticker("What is the capital of France?")
         self.assertIsNone(result)
 
+    @patch("ingest.download.load_ticker_titles")
     @patch("ingest.download.load_cik_map")
-    def test_edgar_failure_returns_none_instead_of_raising(self, mock_load):
+    def test_name_candidate_resolves_via_short_name_index(self, mock_load, mock_titles):
+        # "Palantir" (a company NAME, not a ticker symbol) still resolves — this is the gap
+        # that made chat only work for "PLTR" and not "Palantir" before this tier existed.
+        mock_load.return_value = {"PLTR": "0001321655"}
+        mock_titles.return_value = {"PLTR": "Palantir Technologies Inc."}
+        result = universe.resolve_ticker("What was Palantir's revenue last year?")
+        self.assertEqual(result, {"ticker": "PLTR", "cik": "0001321655", "ingested": False})
+
+    @patch("ingest.download.load_ticker_titles")
+    @patch("ingest.download.load_cik_map")
+    def test_leading_capitalized_word_does_not_block_name_match(self, mock_load, mock_titles):
+        # _NAME_CANDIDATE_RE greedily grabs adjacent capitalized words, so a sentence-initial
+        # "Is" right before the company name becomes one candidate ("Is Rivian") that matches
+        # nothing on its own — _sub_phrases must still try "Rivian" alone.
+        mock_load.return_value = {"RIVN": "0001874178"}
+        mock_titles.return_value = {"RIVN": "Rivian Automotive, Inc. / DE"}
+        result = universe.resolve_ticker("Is Rivian a good investment?")
+        self.assertEqual(result["ticker"], "RIVN")
+
+    @patch("ingest.download.load_ticker_titles")
+    @patch("ingest.download.load_cik_map")
+    def test_edgar_failure_returns_none_instead_of_raising(self, mock_load, mock_titles):
         mock_load.side_effect = RuntimeError("EDGAR unreachable")
+        mock_titles.side_effect = RuntimeError("EDGAR unreachable")
         result = universe.resolve_ticker("Is TSLA expensive right now?")
+        self.assertIsNone(result)
+
+    @patch("ingest.download.load_ticker_titles")
+    def test_name_candidate_edgar_failure_returns_none(self, mock_titles):
+        mock_titles.side_effect = RuntimeError("EDGAR unreachable")
+        result = universe.resolve_ticker("What was Palantir's revenue last year?")
         self.assertIsNone(result)
 
 

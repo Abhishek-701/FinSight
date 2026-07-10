@@ -5,6 +5,8 @@ import { markCitations, money } from '../lib/format'
 import type { ChatTurn } from '../hooks/useChat'
 import type { HistoryRow } from '../lib/types'
 import Sparkline from './Sparkline'
+import { useTickerIngest } from '../hooks/useTickerIngest'
+import IngestProgress from './IngestProgress'
 
 function marketDetails(turn: ChatTurn) {
   return turn.citationDetails.filter((c) => c.chunk_id.includes('-MKT-'))
@@ -57,6 +59,26 @@ function ToolTrace({ turn }: { turn: ChatTurn }) {
   )
 }
 
+function IngestOfferChip({ turn, onAsk }: { turn: ChatTurn; onAsk: (q: string) => void }) {
+  const ticker = turn.needsIngestTicker
+  const { state, start } = useTickerIngest()
+  if (!ticker) return null
+  if (state.status === 'idle') {
+    return (
+      <div className="ingest-offer">
+        <button className="chip" onClick={() => start(ticker, () => onAsk(turn.question))}>
+          + Add {ticker} (~1 min)
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="ingest-offer">
+      <IngestProgress state={state} />
+    </div>
+  )
+}
+
 function Sources({ turn }: { turn: ChatTurn }) {
   if (!turn.citationDetails.length) return null
   return (
@@ -75,7 +97,7 @@ function Sources({ turn }: { turn: ChatTurn }) {
   )
 }
 
-export default function MessageBubble({ turn }: { turn: ChatTurn }) {
+export default function MessageBubble({ turn, onAsk }: { turn: ChatTurn; onAsk: (q: string) => void }) {
   return (
     <>
       <div className="user-query">{turn.question}</div>
@@ -93,6 +115,7 @@ export default function MessageBubble({ turn }: { turn: ChatTurn }) {
             {markCitations(turn.answer)}
           </ReactMarkdown>
         </div>
+        {!turn.streaming && turn.needsIngestTicker && <IngestOfferChip turn={turn} onAsk={onAsk} />}
         {!turn.streaming && <ToolTrace turn={turn} />}
         {!turn.streaming && <Sources turn={turn} />}
       </article>

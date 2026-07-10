@@ -16,6 +16,38 @@ export interface ChatResponse {
   gaps?: string[]
   refused?: boolean
   refusal_reason?: string
+  action?: string | null
+  ticker?: string | null
+}
+
+export interface IngestJob {
+  ticker: string
+  status: 'queued' | 'running' | 'done' | 'error'
+  stage: string | null
+  pct: number
+  error: { reason: string; message: string } | null
+  result: {
+    ticker: string
+    company: string
+    cik: string
+    accession: string
+    filing_date: string
+    chunk_count: number
+    fact_count: number
+  } | null
+}
+
+export interface UniverseSearchResult {
+  ticker: string
+  name: string
+  ingested: boolean
+}
+
+export interface UniverseResolveResult {
+  ticker: string
+  name: string
+  cik: string | null
+  ingested: boolean
 }
 
 export interface SessionMessage {
