@@ -16,7 +16,7 @@ import json
 
 import anthropic
 
-from app import config
+from app import config, universe
 from app.tools.registry import TOOL_REGISTRY, validate_args
 
 try:
@@ -42,7 +42,7 @@ def _build_schema() -> dict:
     from app.screener import DERIVED_METRICS
     from app.tools import compute
 
-    tickers = list(config.COMPANIES)
+    tickers = universe.active_tickers()
     xbrl_metrics = sorted({metric for _, metric in config.XBRL_KEYWORD_MAP})
     compute_metrics = list(compute._METRIC_HANDLERS)  # noqa: SLF001
     def _nullable_enum(values: list[str]) -> dict:

@@ -20,13 +20,40 @@ from pathlib import Path
 from app import config
 
 
+def _load_dynamic_facts() -> list[dict]:
+    """Facts for on-demand ingested companies (V4.1 ingest pipeline writes these files).
+
+    Empty today — data/dynamic/facts/ doesn't exist until a company is ingested on demand.
+    """
+    directory = config.DYNAMIC_FACTS_DIR
+    if not directory.exists():
+        return []
+    facts: list[dict] = []
+    for path in sorted(directory.glob("*.json")):
+        try:
+            facts.extend(json.loads(path.read_text(encoding="utf-8")))
+        except (json.JSONDecodeError, OSError):
+            continue
+    return facts
+
+
 @lru_cache(maxsize=1)
 def _load_facts() -> list[dict]:
-    """Load facts.json once and cache. Returns [] if the file is missing (graceful degradation)."""
+    """Load facts.json (seed + dynamic) once and cache. [] if the seed file is missing.
+
+    Call invalidate() after ingesting/evicting a dynamic company so this rebuilds.
+    """
     path: Path = config.FACTS_PATH
-    if not path.exists():
-        return []
-    return json.loads(path.read_text(encoding="utf-8"))
+    facts = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    return facts + _load_dynamic_facts()
+
+
+def invalidate() -> None:
+    """Force the next query() to reload facts from disk.
+
+    Call after a dynamic company is ingested or evicted (app.ingest_jobs, V4.1).
+    """
+    _load_facts.cache_clear()
 
 
 def _concepts_for(metric: str, ticker: str) -> list[str]:

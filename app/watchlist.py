@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import UTC, datetime
 
-from app import config
+from app import config, universe
 
 
 def _now() -> str:
@@ -24,12 +24,12 @@ def _connect() -> sqlite3.Connection:
 
 
 def _row(ticker: str, added_at: str) -> dict:
-    return {"ticker": ticker, "company": config.COMPANIES.get(ticker, ticker), "added_at": added_at}
+    return {"ticker": ticker, "company": universe.company_name(ticker), "added_at": added_at}
 
 
 def add(client_id: str, ticker: str) -> list[dict]:
     ticker = ticker.upper()
-    if ticker not in config.COMPANIES:
+    if ticker not in universe.active_companies():
         raise ValueError("unsupported_ticker")
     conn = _connect()
     try:

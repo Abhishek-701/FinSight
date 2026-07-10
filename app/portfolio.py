@@ -7,7 +7,7 @@ import math
 import sqlite3
 from datetime import UTC, datetime
 
-from app import config
+from app import config, universe
 
 
 def _now() -> str:
@@ -28,7 +28,7 @@ def _connect() -> sqlite3.Connection:
 def _row(ticker: str, shares: float, updated_at: str) -> dict:
     return {
         "ticker": ticker,
-        "company": config.COMPANIES.get(ticker, ticker),
+        "company": universe.company_name(ticker),
         "shares": shares,
         "updated_at": updated_at,
     }
@@ -36,7 +36,7 @@ def _row(ticker: str, shares: float, updated_at: str) -> dict:
 
 def set_holding(client_id: str, ticker: str, shares: float) -> list[dict]:
     ticker = ticker.upper()
-    if ticker not in config.COMPANIES:
+    if ticker not in universe.active_companies():
         raise ValueError("unsupported_ticker")
     if not math.isfinite(shares) or shares <= 0 or shares > 1e9:
         raise ValueError("invalid_shares")

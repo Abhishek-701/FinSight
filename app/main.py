@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import audit, config, corpus, insight, portfolio, research, screener, watchlist
+from app import audit, config, corpus, insight, portfolio, research, screener, universe, watchlist
 from app.agent import session
 from app.agent.context import from_history
 from app.tools import market
@@ -167,7 +167,7 @@ def quote(ticker: str, request: Request, x_api_key: str | None = Header(default=
 
 @app.get("/api/companies")
 def companies():
-    return {"companies": config.COMPANIES}
+    return {"companies": universe.active_companies()}
 
 
 @app.get("/api/watchlist")
@@ -282,7 +282,7 @@ def remove_portfolio_holding(ticker: str, client_id: str, request: Request,
 def insight_brief(ticker: str, request: Request, x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
     ticker = ticker.upper()
-    if ticker not in config.COMPANIES:
+    if not universe.is_ingested(ticker):
         raise HTTPException(status_code=400, detail="unsupported_ticker")
     return insight.brief(ticker)
 
@@ -291,7 +291,7 @@ def insight_brief(ticker: str, request: Request, x_api_key: str | None = Header(
 def insight_brief_stream(ticker: str, request: Request, x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
     ticker = ticker.upper()
-    if ticker not in config.COMPANIES:
+    if not universe.is_ingested(ticker):
         raise HTTPException(status_code=400, detail="unsupported_ticker")
     return StreamingResponse(insight.stream_brief(ticker), media_type="text/event-stream")
 

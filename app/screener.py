@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from app import config, facts
+from app import config, facts, universe
 
 _RAW_METRICS = ("revenue", "operating_income", "net_income", "equity")
 _MARKET_DEPENDENT = ("price", "market_cap", "ps_ratio")
@@ -25,7 +25,7 @@ def _xbrl_source_id(ticker: str, fact: dict) -> str:
 
 
 def _row_for_ticker(ticker: str, include_market: bool) -> dict:
-    company = config.COMPANIES[ticker]
+    company = universe.company_name(ticker)
     raw: dict[str, float | None] = {}
     sources: dict[str, str] = {}
     fiscal_period_end = None

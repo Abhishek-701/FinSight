@@ -21,15 +21,44 @@ def _tok(text: str) -> list[str]:
     return _TOKEN_RE.findall(text.lower())
 
 
+def _load_dynamic_chunks() -> list[dict]:
+    """Chunks for on-demand ingested companies (V4.1 ingest pipeline writes these files).
+
+    Empty today — data/dynamic/chunks/ doesn't exist until a company is ingested on demand.
+    """
+    directory = config.DYNAMIC_CHUNKS_DIR
+    if not directory.exists():
+        return []
+    chunks: list[dict] = []
+    for path in sorted(directory.glob("*.json")):
+        try:
+            chunks.extend(json.loads(path.read_text(encoding="utf-8")))
+        except (json.JSONDecodeError, OSError):
+            continue
+    return chunks
+
+
 @lru_cache(maxsize=1)
 def _load():
-    """Load chunks + build the BM25 index and Chroma handle once (cached)."""
+    """Load chunks (seed + dynamic) + build the BM25 index and Chroma handle once (cached).
+
+    Call invalidate() after ingesting/evicting a dynamic company so this rebuilds.
+    """
     chunks = json.loads(open(config.CHUNKS_PATH, encoding="utf-8").read())
+    chunks = chunks + _load_dynamic_chunks()
     by_id = {c["chunk_id"]: c for c in chunks}
     ids = [c["chunk_id"] for c in chunks]
     bm25 = BM25Okapi([_tok(c["text"]) for c in chunks])
     coll = chromadb.PersistentClient(path=config.CHROMA_DIR).get_collection(config.COLLECTION)
     return chunks, by_id, ids, bm25, coll
+
+
+def invalidate() -> None:
+    """Force the next retrieve() to reload chunks/BM25/Chroma handle from disk.
+
+    Call after a dynamic company is ingested or evicted (app.ingest_jobs, V4.1).
+    """
+    _load.cache_clear()
 
 
 @lru_cache(maxsize=256)

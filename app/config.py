@@ -124,6 +124,14 @@ SESSION_DB_PATH = _ROOT / "data" / "sessions.sqlite3"
 AUDIT_LOG_PATH = _ROOT / "data" / "audit.jsonl"
 WEB_DIST = _ROOT / "static" / "dist"  # built React SPA (Phase 3); falls back to static/index.html
 
+# --- Dynamic (on-demand ingested) companies (V4.0+) ---
+# Not committed to git — populated at runtime by the V4.1 ingest pipeline. Empty today, so
+# app.universe currently just mirrors COMPANIES/ALIASES below (see app/universe.py).
+DYNAMIC_DIR = _ROOT / "data" / "dynamic"
+DYNAMIC_REGISTRY_PATH = DYNAMIC_DIR / "registry.json"
+DYNAMIC_CHUNKS_DIR = DYNAMIC_DIR / "chunks"
+DYNAMIC_FACTS_DIR = DYNAMIC_DIR / "facts"
+
 # --- XBRL fact store ---
 FACTS_PATH = _ROOT / "data" / "facts.json"
 

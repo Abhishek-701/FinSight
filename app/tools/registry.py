@@ -11,10 +11,12 @@ class ToolSpec:
     name: str
     description: str
     handler: Callable[..., dict[str, Any]]
-    # arg_name -> allowed enum values (list) for scalar args, or the sentinel "*" for
-    # unconstrained args (question/reason free text, inputs dict). Used to validate
-    # LLM-planned actions (app/agent/router_plan.py); the deterministic router doesn't
-    # need it since its args are hand-written, but tools are validated uniformly.
+    # arg_name -> allowed enum values (list) for scalar args, a zero-arg callable returning
+    # such a list (resolved at validation time so it tracks the live universe — see
+    # app.universe.active_tickers), or the sentinel "*" for unconstrained args (question/reason
+    # free text, inputs dict). Used to validate LLM-planned actions (app/agent/router_plan.py);
+    # the deterministic router doesn't need it since its args are hand-written, but tools are
+    # validated uniformly.
     arg_spec: dict[str, Any] = field(default_factory=dict)
 
 
@@ -33,11 +35,11 @@ def _company_insight(**kwargs: Any) -> dict[str, Any]:
 
 
 def _load_specs() -> dict[str, ToolSpec]:
-    from app import config
+    from app import config, universe
     from app.screener import DERIVED_METRICS
     from app.tools import compute, filings, market, screen
 
-    tickers = list(config.COMPANIES)
+    tickers = universe.active_tickers  # callable: re-resolved at validation time, not import time
     xbrl_metrics = sorted({metric for _, metric in config.XBRL_KEYWORD_MAP})
     compute_metrics = list(compute._METRIC_HANDLERS)  # noqa: SLF001 - registry owns tool internals
 
@@ -105,6 +107,8 @@ def validate_args(tool: str, args: dict[str, Any]) -> dict[str, Any] | None:
     """Drop unknown keys; return None if any known key holds a value outside its enum.
 
     "*" in arg_spec means unconstrained (free text / dict) — any value is accepted.
+    An arg_spec entry may also be a zero-arg callable (e.g. universe.active_tickers) resolved
+    here, at validation time, so the allowed set tracks the live universe.
     A list arg (e.g. tickers) is validated element-wise against the same enum.
     """
     spec = TOOL_REGISTRY.get(tool)
@@ -118,6 +122,8 @@ def validate_args(tool: str, args: dict[str, Any]) -> dict[str, Any] | None:
         if allowed == "*":
             cleaned[key] = value
             continue
+        if callable(allowed):
+            allowed = allowed()
         values = value if isinstance(value, list) else [value]
         if not all(v in allowed for v in values):
             return None

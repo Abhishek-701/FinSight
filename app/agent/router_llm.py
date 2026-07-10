@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 
-from app import config, router
+from app import config, router, universe
 from app.tools.market import detect_market_intent
 
 
@@ -24,7 +24,7 @@ def _matches(pattern: str, question: str) -> bool:
 def _mentioned_tickers(question: str, route: dict) -> list[str]:
     tickers = list(route.get("tickers", []))
     low = question.lower()
-    for alias, ticker in config.ALIASES.items():
+    for alias, ticker in universe.aliases().items():
         if re.search(rf"\b{re.escape(alias)}\b", low) and ticker not in tickers:
             tickers.append(ticker)
     return tickers
@@ -61,7 +61,7 @@ def _deterministic_v3_actions(question: str, route: dict) -> tuple[str, list[dic
     if explain_move:
         if not ticker:
             return None
-        company = config.COMPANIES[ticker]
+        company = universe.company_name(ticker)
         actions = [
             {"tool": "market_history", "args": {"ticker": ticker, "period": _history_period(question)}},
             {"tool": "market_quote", "args": {"ticker": ticker}},
@@ -74,7 +74,7 @@ def _deterministic_v3_actions(question: str, route: dict) -> tuple[str, list[dic
     if insight:
         if not ticker:
             return None
-        company = config.COMPANIES[ticker]
+        company = universe.company_name(ticker)
         actions = [
             {"tool": "company_insight", "args": {"ticker": ticker}},
             {"tool": "filing_rag", "args": {

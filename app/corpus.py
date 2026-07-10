@@ -6,7 +6,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 
-from app import config
+from app import config, universe
 
 
 def manifest() -> list[dict]:
@@ -29,7 +29,7 @@ def status() -> dict:
     return {
         "corpus_version": version(),
         "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
-        "companies": config.COMPANIES,
+        "companies": universe.active_companies(),
         "manifest_count": len(items),
         "chunk_count": _json_count(config.CHUNKS_PATH),
         "facts_count": _json_count(config.FACTS_PATH),

@@ -12,7 +12,7 @@ import re
 import time
 from collections.abc import Iterable
 
-from app import config, decompose, facts as facts_mod, retrieve, router, synthesize
+from app import config, decompose, facts as facts_mod, retrieve, router, synthesize, universe
 from app.agent.context import ConversationContext, contextualize_question
 from app.agent import executor
 from app.agent.router_llm import route_tools
@@ -84,7 +84,7 @@ def _rag_tool_name(route: dict) -> str:
 
 
 def _company_name(ticker: str | None) -> str:
-    return config.COMPANIES.get(ticker or "", "")
+    return universe.active_companies().get(ticker or "", "")
 
 
 def _is_segment_question(question: str) -> bool:
@@ -269,7 +269,7 @@ def reflect(meta: dict, answer_text: str) -> dict:
     cited = set(CITATION_RE.findall(answer_text))
     cited_tickers = {cid.split("-")[0] for cid in cited}
     requested_tickers = meta.get("route", {}).get("tickers", [])
-    gaps = [config.COMPANIES[t] for t in requested_tickers if t not in cited_tickers]
+    gaps = [universe.company_name(t) for t in requested_tickers if t not in cited_tickers]
     numeric_claim = bool(re.search(r"\d", answer_text))
     not_found = "not found" in answer_text.lower() or "cannot answer" in answer_text.lower()
     return {

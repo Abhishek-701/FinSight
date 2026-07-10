@@ -85,7 +85,7 @@ def build_xbrl_context(facts: list[dict]) -> tuple[str, list[dict]]:
     Chunk IDs use the scheme  {TICKER}-XBRL-{concept_short}  so they are
     visually distinguishable from RAG chunk IDs (e.g. AAPL-XBRL-OperatingIncomeLoss).
     """
-    from app import config  # local import avoids circular at module level
+    from app import universe  # local import avoids circular at module level
 
     company_facts: dict[str, list[dict]] = {}
     for f in facts:
@@ -93,7 +93,7 @@ def build_xbrl_context(facts: list[dict]) -> tuple[str, list[dict]]:
 
     synthetic_chunks: list[dict] = []
     for ticker, ticker_facts in company_facts.items():
-        company = config.COMPANIES.get(ticker, ticker)
+        company = universe.company_name(ticker)
         # Use the period_end of the first fact as the filing period label.
         period_end = ticker_facts[0].get("period_end", "")
         filing_date = ticker_facts[0].get("filing_date", "")

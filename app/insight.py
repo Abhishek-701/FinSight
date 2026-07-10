@@ -12,7 +12,7 @@ from __future__ import annotations
 import time
 from datetime import UTC, datetime
 
-from app import config, facts, retrieve, screener, synthesize
+from app import config, facts, retrieve, screener, synthesize, universe
 from app.research import CITATION_RE, _citation_payload, _elapsed, sse
 from app.tools import compute, market
 
@@ -47,7 +47,7 @@ def build_brief_data(ticker: str) -> dict:
     XBRL, valuation is omitted, and market_status reports "unavailable".
     """
     ticker = ticker.upper()
-    company = config.COMPANIES.get(ticker, ticker)
+    company = universe.company_name(ticker)
     evidence: list[dict] = []
 
     quote_result = market.market_quote(ticker)
@@ -112,7 +112,7 @@ def company_insight(ticker: str | None = None, question: str | None = None,
                     route: dict | None = None, **_: object) -> dict:
     """Chat tool: assemble the insight card and return it as citable evidence."""
     ticker = ticker or ((route or {}).get("tickers") or [None])[0]
-    if not ticker or ticker.upper() not in config.COMPANIES:
+    if not ticker or not universe.is_ingested(ticker.upper()):
         return {"status": "missing_ticker", "data": {}, "evidence": []}
     data = build_brief_data(ticker)
     return {

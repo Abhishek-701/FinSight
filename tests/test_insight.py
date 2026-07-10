@@ -59,7 +59,8 @@ class InsightToolTests(unittest.TestCase):
 
     def test_company_insight_tool_registered(self):
         self.assertIn("company_insight", registry.TOOL_REGISTRY)
-        self.assertEqual(registry.TOOL_REGISTRY["company_insight"].arg_spec["ticker"], list(config.COMPANIES))
+        ticker_spec = registry.TOOL_REGISTRY["company_insight"].arg_spec["ticker"]
+        self.assertEqual(ticker_spec(), list(config.COMPANIES))  # callable, resolved at validation time
 
     def test_company_insight_missing_ticker(self):
         result = insight.company_insight(ticker=None, route={"tickers": []})

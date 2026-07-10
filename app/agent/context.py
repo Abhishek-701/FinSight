@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from app import config, router
+from app import router, universe
 
 
 @dataclass
@@ -88,12 +88,12 @@ def contextualize_question(question: str, context: ConversationContext | None) -
 
     # Plural pronoun with multiple prior companies → keep as multi-company
     if _PLURAL_PRONOUN_RE.search(question) and len(context.tickers) > 1:
-        names = ", ".join(config.COMPANIES[t] for t in context.tickers)
+        names = ", ".join(universe.company_name(t) for t in context.tickers)
         return f"For {names}, {question}", context.as_dict()
 
     # Singular pronoun or topical keyword → resolve to the one active company
     if active and (_SINGULAR_PRONOUN_RE.search(question) or _TOPICAL_FOLLOWUP_RE.search(question)):
-        company = config.COMPANIES[active]
+        company = universe.company_name(active)
         return f"For {company}, {question}", context.as_dict()
 
     return question, context.as_dict()

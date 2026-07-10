@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from app import config
+from app import config, universe
 from app.tools.market_provider import get_provider
 
 try:
@@ -22,7 +22,7 @@ def _now_iso() -> str:
 
 
 def _company(ticker: str) -> str:
-    return config.COMPANIES.get(ticker.upper(), ticker.upper())
+    return universe.company_name(ticker)
 
 
 def _first(mapping: Any, *keys: str) -> Any:
