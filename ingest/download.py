@@ -57,6 +57,7 @@ def latest_10k(cik: str) -> dict:
                 "accession_nodash": accession.replace("-", ""),
                 "filing_date": recent["filingDate"][i],
                 "primary_doc": recent["primaryDocument"][i],
+                "company_name": subs.get("name", ""),
             }
     raise RuntimeError(f"No 10-K found in recent filings for CIK {cik}")
 

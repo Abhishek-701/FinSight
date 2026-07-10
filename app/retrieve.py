@@ -108,7 +108,10 @@ def retrieve(query: str, tickers: list[str] | None, k: int) -> dict:
     for rank, cid in enumerate(sparse):
         fused[cid] = fused.get(cid, 0.0) + 1.0 / (config.RRF_K + rank)
 
-    fused_ids = sorted(fused, key=lambda c: fused[c], reverse=True)
+    # by_id is a cached snapshot (see _load); Chroma is queried live, so a ticker ingested
+    # mid-request could return an id not yet in this snapshot. Skip rather than KeyError —
+    # the next request sees it once invalidate() refreshes the cache.
+    fused_ids = [cid for cid in sorted(fused, key=lambda c: fused[c], reverse=True) if cid in by_id]
     if config.USE_RERANKER:
         from app import rerank  # lazy import so the model only loads when enabled
         candidates = [{**by_id[cid], "fused_score": fused[cid]} for cid in fused_ids[:pool]]

@@ -12,37 +12,50 @@ from app import config
 
 _client = anthropic.Anthropic()
 
-SYSTEM = (
-    "You answer questions about six companies strictly from the provided evidence.\n"
-    "The six companies are: Apple, JPMorgan Chase, Walmart, Coca-Cola, NVIDIA, and Caterpillar.\n"
-    "\n"
-    "Content rules:\n"
-    "- Use ONLY the provided context. Never use outside knowledge or guess a number.\n"
-    "- Cite every figure inline with its chunk id in square brackets, e.g. [NVDA-0062] or [NVDA-MKT-...].\n"
-    "- Treat SEC filings as historical/as-reported; market data as live or delayed as-of the quoted timestamp.\n"
-    "- When using market data, state the as-of time and note it may be delayed and is not investment advice.\n"
-    "- If the question is about a company other than the six listed, say: "
-    "'<Company> is not among the six companies I cover (Apple, JPMorgan Chase, Walmart, "
-    "Coca-Cola, NVIDIA, Caterpillar). I cannot answer questions about it.' "
-    "Do not describe which companies' data appeared in the context.\n"
-    "- If the context does not contain the asked figure, say plainly "
-    "'Not found in the provided filings for <Company>.' Do not substitute a different metric.\n"
-    "- In cross-company comparisons, state each company's fiscal year end next to its figure "
-    "(Apple ends September, NVIDIA and Walmart end January, others end December).\n"
-    "- Prefer CONSOLIDATED figures. If a number is segment- or geography-level, label it as such.\n"
-    "\n"
-    "Formatting rules:\n"
-    "- Write in markdown. Use **bold** for key figures, ## for major sections, ### for sub-sections,\n"
-    "  - bullets for lists, and markdown tables for side-by-side comparisons of three or more values.\n"
-    "- Lead with the answer, then the supporting evidence. Never open with 'Based on the provided\n"
-    "  context' or 'Here is a summary' — go straight to the substance.\n"
-    "- Only create a heading (## or ###) when you have at least two substantive sentences of evidence\n"
-    "  to put under it. If context for a topic is thin, fold it into an adjacent paragraph instead.\n"
-    "  Never write a heading followed immediately by a divider, another heading, or nothing.\n"
-    "- For broad or open-ended questions, write flowing themed paragraphs. Do not produce a\n"
-    "  report skeleton or outline — write only what the evidence supports, in full sentences.\n"
-    "- Report numbers in the units given in the source (e.g. 'in millions'). Be concise and factual."
+_FIXED_FYE_NOTE = (
+    "Apple ends September, NVIDIA and Walmart end January, others end December"
 )
+
+
+def _system_prompt() -> str:
+    """Built fresh per call so the covered-company list and refusal line track the live
+    universe (seeds + on-demand ingested tickers, app.universe) rather than a fixed six.
+    """
+    from app import universe  # local import avoids circular at module level
+
+    companies = sorted(universe.active_companies().values())
+    company_list = ", ".join(companies)
+    return (
+        "You answer questions about a set of companies strictly from the provided evidence.\n"
+        f"The covered companies are: {company_list}.\n"
+        "\n"
+        "Content rules:\n"
+        "- Use ONLY the provided context. Never use outside knowledge or guess a number.\n"
+        "- Cite every figure inline with its chunk id in square brackets, e.g. [NVDA-0062] or [NVDA-MKT-...].\n"
+        "- Treat SEC filings as historical/as-reported; market data as live or delayed as-of the quoted timestamp.\n"
+        "- When using market data, state the as-of time and note it may be delayed and is not investment advice.\n"
+        "- If the question is about a company not in the covered list above, say: "
+        f"'<Company> is not among the companies I have filing data for right now ({company_list}). "
+        "I cannot answer questions about it.' "
+        "Do not describe which companies' data appeared in the context.\n"
+        "- If the context does not contain the asked figure, say plainly "
+        "'Not found in the provided filings for <Company>.' Do not substitute a different metric.\n"
+        "- In cross-company comparisons, state each company's fiscal year end next to its figure "
+        f"(for the original six: {_FIXED_FYE_NOTE}; for others, use the filing date in the context).\n"
+        "- Prefer CONSOLIDATED figures. If a number is segment- or geography-level, label it as such.\n"
+        "\n"
+        "Formatting rules:\n"
+        "- Write in markdown. Use **bold** for key figures, ## for major sections, ### for sub-sections,\n"
+        "  - bullets for lists, and markdown tables for side-by-side comparisons of three or more values.\n"
+        "- Lead with the answer, then the supporting evidence. Never open with 'Based on the provided\n"
+        "  context' or 'Here is a summary' — go straight to the substance.\n"
+        "- Only create a heading (## or ###) when you have at least two substantive sentences of evidence\n"
+        "  to put under it. If context for a topic is thin, fold it into an adjacent paragraph instead.\n"
+        "  Never write a heading followed immediately by a divider, another heading, or nothing.\n"
+        "- For broad or open-ended questions, write flowing themed paragraphs. Do not produce a\n"
+        "  report skeleton or outline — write only what the evidence supports, in full sentences.\n"
+        "- Report numbers in the units given in the source (e.g. 'in millions'). Be concise and factual."
+    )
 
 
 VALUATION_GUIDANCE = (
@@ -148,7 +161,7 @@ def stream_answer(question: str, chunks: list[dict], guidance: str | None = None
         model=config.CHAT_MODEL,
         max_tokens=2000,
         temperature=config.TEMPERATURE,
-        system=SYSTEM,
+        system=_system_prompt(),
         messages=[{"role": "user", "content": user}],
     ) as stream:
         for text in stream.text_stream:
@@ -174,7 +187,7 @@ def stream_section(query: str, chunks: list[dict]):
         model=config.CHAT_MODEL,
         max_tokens=600,
         temperature=config.TEMPERATURE,
-        system=SYSTEM,
+        system=_system_prompt(),
         messages=[{"role": "user", "content": user}],
     ) as stream:
         for text in stream.text_stream:

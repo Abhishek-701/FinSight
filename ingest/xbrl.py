@@ -186,6 +186,17 @@ def _extract_facts(
     return facts
 
 
+def extract_facts_from_html(html: str, ticker: str, filing_date: str) -> list[dict]:
+    """Public per-ticker entrypoint: consolidated annual XBRL facts from one filing's HTML.
+
+    Reused by main() (six seed companies) and ingest/pipeline.py (on-demand tickers).
+    """
+    soup = BeautifulSoup(html, "lxml")
+    ctx_map = _build_context_map(soup)
+    dur_ids, inst_ids = _annual_context_ids(ctx_map)
+    return _extract_facts(soup, ticker, ctx_map, dur_ids, inst_ids, filing_date)
+
+
 def _reconcile(all_facts: list[dict], chunks: list[dict]) -> None:
     """Cross-check every extracted fact against the RAG chunk corpus.
 

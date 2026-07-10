@@ -131,6 +131,11 @@ DYNAMIC_DIR = _ROOT / "data" / "dynamic"
 DYNAMIC_REGISTRY_PATH = DYNAMIC_DIR / "registry.json"
 DYNAMIC_CHUNKS_DIR = DYNAMIC_DIR / "chunks"
 DYNAMIC_FACTS_DIR = DYNAMIC_DIR / "facts"
+DYNAMIC_CIK_MAP_PATH = DYNAMIC_DIR / "cik_map.json"
+
+# --- On-demand ingest (V4.1: ingest/pipeline.py) ---
+CIK_MAP_TTL_HOURS = 24
+INGEST_MAX_RAW_MB = 30  # reject filings above this size (protects the 512MB deploy RAM ceiling)
 
 # --- XBRL fact store ---
 FACTS_PATH = _ROOT / "data" / "facts.json"
