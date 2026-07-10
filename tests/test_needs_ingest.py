@@ -62,5 +62,22 @@ class ResearchOfferIngestTests(unittest.TestCase):
         self.assertEqual(meta["ticker"], "TSLA")
 
 
+class StreamEventsOfferIngestTests(unittest.TestCase):
+    """The frontend uses the STREAMING chat endpoint exclusively (useChat.ts -> streamChat),
+    so the offer_ingest action/ticker must survive stream_events()'s own "done" event
+    construction, not just the non-streaming run()/answer() path."""
+
+    @patch("app.router.universe.resolve_ticker")
+    def test_done_event_carries_action_and_ticker(self, mock_resolve):
+        mock_resolve.return_value = {"ticker": "TSLA", "cik": "0001318605", "ingested": False}
+        events = list(research.stream_events("What was TSLA's revenue last year?"))
+        done_events = [e for e in events if e.startswith("event: done")]
+        self.assertEqual(len(done_events), 1)
+        payload = done_events[0]
+        self.assertIn('"action": "offer_ingest"', payload)
+        self.assertIn('"ticker": "TSLA"', payload)
+        self.assertIn('"refusal_reason": "needs_ingest"', payload)
+
+
 if __name__ == "__main__":
     unittest.main()

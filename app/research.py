@@ -602,6 +602,7 @@ def stream_events(question: str, conversation_context: ConversationContext | Non
         yield sse("token", {"text": meta["answer"]})
         yield sse("done", {"citations": [], "gaps": [], "refused": True,
                            "refusal_reason": meta["refusal_reason"],
+                           "action": meta.get("action"), "ticker": meta.get("ticker"),
                            "plan": research_plan, "tool_calls": tool_calls,
                            "reflection": reflection, "question": question,
                            "contextualized_question": working_question,
