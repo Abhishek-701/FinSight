@@ -1,10 +1,10 @@
 # FinSight
 
-Financial research assistant over the most recent 10-K filings of **Apple, JPMorgan Chase, Walmart, Coca-Cola, NVIDIA, and Caterpillar** — grounded Q&A with inline citations, valuation-aware chat (P/E, P/S computed from live price × filing fundamentals), price-move explanations grounded in disclosed risk factors, one-click company insight briefs, a stock screener, side-by-side comparison, price charts, and a portfolio planner — all backed by the same filing corpus and live (delayed) market data.
+Financial research assistant over SEC 10-K filings — seeded with **Apple, JPMorgan Chase, Walmart, Coca-Cola, NVIDIA, and Caterpillar**, and open to **any US-listed company on demand**: ask about a ticker or company name that isn't loaded yet and FinSight fetches its latest 10-K from SEC EDGAR live. Grounded Q&A with inline citations, valuation-aware chat (P/E, P/S computed from live price × filing fundamentals), price-move explanations grounded in disclosed risk factors, one-click company insight briefs, a stock screener, side-by-side comparison, price charts, and a portfolio planner — all backed by the same filing corpus and live (delayed) market data.
 
 **Live demo:** https://finsight-vh4y.onrender.com
 
-> Runs on Render's free tier — after ~15 minutes idle the service spins down, so the **first request can take 30–60s** to cold-start. Subsequent requests are fast.
+> Runs on Render's free tier — after ~15 minutes idle the service spins down, so the **first request can take 30–60s** to cold-start. Subsequent requests are fast. Adding a new company (see below) takes under a minute on top of that. Companies added on demand live on the server's disk, which is **ephemeral on Render** — they don't survive a redeploy, so the demo's roster occasionally resets back to the six seeds; adding them back is quick.
 
 ## Try it
 
@@ -20,20 +20,25 @@ Open the demo and ask things like:
 - *"Give me an insight brief on Apple"* — quote, valuation, peer ranks, and a two-section filing narrative in one answer.
 - Follow-ups without a company name (*"and its net income?"*) resolve to the last company mentioned.
 
-Every answer shows its **citations and tool trace** — including which router strategy answered it (`llm_router` for the valuation/explain-move/insight questions above, `deterministic` for everything else — see [How it works](#how-it-works)). Questions outside the six companies (or outside the filings) are refused rather than hallucinated.
+**Ask about a company that isn't loaded yet** — *"What was Tesla's revenue last year?"*, *"Is Palantir expensive right now?"*, *"What's Rivian's stock price?"* — chat resolves the ticker or company name against the full SEC EDGAR universe and, for a filing question, offers a **"+ Add TSLA"** button right in the reply; click it, watch a short progress bar (download → parse → index → done, under a minute), and the original question answers itself once it's ready. Market-only questions ("what's the stock price") work immediately, no add needed. You can also search any ticker or company name directly from the **"Add a Company"** box in the sidebar. Once added, a company is a full citizen of the corpus — same grounded Q&A, valuation, and insight briefs as the six seeds.
+
+Every answer shows its **citations and tool trace** — including which router strategy answered it (`llm_router` for the valuation/explain-move/insight questions above, `deterministic` for everything else — see [How it works](#how-it-works)). A company FinSight can't find on SEC EDGAR at all (or that has no 10-K on file) is refused rather than hallucinated.
 
 Beyond chat, the sidebar has four more views:
 
-- **Screener** — derived XBRL metrics (margins, ROE, revenue growth, P/S) across all six companies, sortable, with live-price sparklines; each row has a one-click **Insight** action.
-- **Compare** — overlaid price history chart (hover crosshair) for any subset of the six tickers.
-- **Portfolio** — enter share counts per ticker; live valuation, weights, and day change. Stored per anonymous `client_id` in `localStorage` — no account needed. Same for the **watchlist** panel.
-- **Insight** — pick a company for a one-page brief: live quote + sparkline, P/E/P/S/price-change tiles, a fundamentals row with peer-rank badges, and a streaming two-section filing narrative (business & outlook, key risks), all with sources.
+- **Screener** — derived XBRL metrics (margins, ROE, revenue growth, P/S) across the six seed companies, sortable, with live-price sparklines; each row has a one-click **Insight** action.
+- **Compare** — overlaid price history chart (hover crosshair) for any subset of the six seed tickers.
+- **Portfolio** — enter share counts per ticker (any ticker, not just the seeds); live valuation, weights, and day change. Stored per anonymous `client_id` in `localStorage` — no account needed. Same for the **watchlist** panel.
+- **Insight** — pick a company for a one-page brief: live quote + sparkline, P/E/P/S/price-change tiles, a fundamentals row with peer-rank badges, and a streaming two-section filing narrative (business & outlook, key risks), all with sources. Works for any added company, not just the seeds.
 
 ## How it works
 
 ```
 question
-  → router          regex/alias, no LLM          single | decompose | oos | clarify
+  → router          regex/alias, no LLM          single | decompose | needs_ingest | oos | clarify
+       ↓ needs_ingest (real ticker/company, not loaded yet)
+  → offer_ingest    chat: "+ Add TSLA" chip       market-only questions answer immediately —
+                     (or search the sidebar)       only filing questions need the add step
   → xbrl_lookup     structured fact store         fast path for known numeric metrics
        ↓ miss
   → tool router     regex fast paths, or one      bounded plan: which tools to call
@@ -48,11 +53,13 @@ question
 
 Broad questions ("tell me about Apple") route to per-topic synthesis — four focused retrieval+synthesis calls in sequence rather than one large context dump. Derived-metric superlatives ("highest operating margin") route to a `screen_companies` tool that ranks from computed XBRL metrics, so the answer is citable numbers rather than weak RAG.
 
+**Open universe, ingested on demand.** A ticker symbol, `$cashtag`, or company name that resolves against the full SEC EDGAR directory but isn't in the corpus yet routes to `needs_ingest` instead of a flat refusal. `ingest/pipeline.py` reuses the exact same download → parse → chunk → XBRL-extract logic as the six seed companies, add-only into the existing Chroma collection (never touching the seeds), orchestrated by `app/ingest_jobs.py` with a hard one-at-a-time cap (the free-tier RAM ceiling doesn't survive two filings embedding concurrently) and LRU eviction once the dynamic roster hits `UNIVERSE_MAX_DYNAMIC` (12 by default). Company-name resolution (`app/universe.py`) matches EDGAR's company-title directory, not just tickers, with three tiers — exact ticker/cashtag, exact casual name ("Palantir" → PLTR, stripped of legal suffixes like "Inc."), then word-subphrase fallback for names embedded in a sentence.
+
 **Tool routing is hybrid.** Unambiguous questions (plain lookups, screener superlatives, segment questions) are routed by regex alone — zero LLM cost, fully deterministic. Ambiguous or mixed filing+market questions (valuation, "why did the stock move", insight-brief phrasing) get one temp-0 structured-JSON call to a small model (`claude-haiku-4-5`) that plans which tools to call and in what order. That plan is never trusted directly — every tool name and argument is validated against an allowlist before execution, and any invalid or missing plan falls back to a regex-only version of the same three intents, so the feature still works with the router disabled (`FINSIGHT_USE_LLM_ROUTER=0`) or no LLM available. New computed ratios (P/E, P/S, price-change) reuse the same `-CALC-` citation scheme as the original market-cap-to-revenue calculator; valuation and explain-move answers each get an extra grounding instruction appended to the synthesis prompt — valuation ratios are point-in-time and not advice, and a filing may never be cited as the *cause* of a price move, only as disclosed context.
 
-Refusals happen at three points: the retrieval threshold, the synthesis grounding rules, and the system prompt (which explicitly declines for any company outside the six).
+Refusals happen at three points: the retrieval threshold, the synthesis grounding rules, and the system prompt (which is built fresh per request from the live company roster — seeds plus whatever's been added — rather than a fixed list).
 
-**Stack:** FastAPI + ChromaDB + BM25 (`rank_bm25`) backend, OpenAI embeddings, Claude for synthesis and routing, yfinance for market data; React 19 + TypeScript + Vite frontend with zero-dependency SVG charts; one Docker image deployed on Render.
+**Stack:** FastAPI + ChromaDB + BM25 (`rank_bm25`) backend, OpenAI embeddings, Claude for synthesis and routing, yfinance for market data, SEC EDGAR for on-demand filing ingest; React 19 + TypeScript + Vite frontend with zero-dependency SVG charts; one Docker image deployed on Render.
 
 ## Run locally
 
@@ -97,6 +104,8 @@ python ingest/embed.py      # embed chunks → Chroma at data/chroma/
 python ingest/xbrl.py       # inline XBRL tags → data/facts.json
 ```
 
+Any other company doesn't need a script — ask about it in the running app (or use the sidebar search) and `ingest/pipeline.py` runs the same steps for that one ticker into `data/dynamic/`, add-only into the existing Chroma collection.
+
 ### Run
 
 ```bash
@@ -130,7 +139,12 @@ Backend alone at http://127.0.0.1:8000 serves the legacy UI. `npm run build` (fr
 | `/api/portfolio/{ticker}` | DELETE | `?client_id=` — remove a holding |
 | `/api/insight/{ticker}` | GET | Full insight brief: quote, valuation, peer ranks, filing narrative |
 | `/api/insight/{ticker}/stream` | GET | SSE — `card` event (deterministic data) immediately, then narrative tokens, then `done` |
-| `/api/companies` | GET | Supported tickers |
+| `/api/companies` | GET | Currently-loaded companies (seeds + anything added on demand) |
+| `/api/universe/search` | GET | `?q=` — ranked ticker/company-name search over the full SEC EDGAR directory |
+| `/api/universe/resolve` | GET | `?q=` — resolve an exact ticker/cashtag against EDGAR (chat's own resolution path) |
+| `/api/companies/{ticker}/ingest` | POST | Start (or dedupe into) an on-demand ingest job; `202`-style job snapshot |
+| `/api/companies/{ticker}/ingest/status` | GET | Poll an ingest job's status/stage/progress |
+| `/api/companies/{ticker}/ingest/stream` | GET | SSE — staged `progress` events (download/parse/chunk/embed) then `done` |
 | `/api/corpus/status` | GET | Corpus/store health |
 | `/health` | GET | Health check |
 
@@ -154,22 +168,25 @@ Deployed on [Render](https://render.com)'s free tier via `render.yaml`:
 
 1. Connect the GitHub repo in the Render dashboard → New → Blueprint.
 2. Set `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` as secrets when prompted (they're marked `sync: false` in `render.yaml`, so Render asks for them rather than reading them from the repo).
-3. Push to `main` — Render builds the Dockerfile and deploys automatically on every push.
+3. Push to `master` — Render builds the Dockerfile and deploys automatically on every push.
 
-The reranker is off in deploy (`FINSIGHT_USE_RERANKER=0`, baked into the Dockerfile) since `sentence-transformers`/`torch` would exceed the free tier's 512MB RAM. The vector store and chunk/fact stores are committed to the repo so the image builds directly from git with no re-ingest or re-embedding step. The watchlist/portfolio/session SQLite database lives on ephemeral disk and resets on redeploy; the frontend mirrors tickers and share counts in `localStorage` and re-syncs them on load, so a user's data survives a redeploy even though the server-side rows do not.
+The reranker is off in deploy (`FINSIGHT_USE_RERANKER=0`, baked into the Dockerfile) since `sentence-transformers`/`torch` would exceed the free tier's 512MB RAM. The vector store and chunk/fact stores for the six seed companies are committed to the repo so the image builds directly from git with no re-ingest or re-embedding step. The watchlist/portfolio/session SQLite database and any on-demand-added companies (`data/dynamic/`, gitignored) live on ephemeral disk and reset on redeploy; the frontend mirrors tickers and share counts in `localStorage` and re-syncs them on load, so a user's watchlist/portfolio *selections* survive a redeploy even though the server-side rows — and any added companies' filing data — do not. Re-adding a company after a redeploy is the same ~1-minute flow as adding it the first time.
 
 ## Repo layout
 
 ```
-ingest/     download  parse  chunk  embed  xbrl  validate
-app/        main  research  config  audit  corpus  synthesize  retrieve  router  decompose  facts  rerank  screener  watchlist  portfolio  insight
+ingest/     download  parse  chunk  embed  xbrl  validate  pipeline (on-demand per-ticker ingest)
+app/        main  research  config  audit  corpus  synthesize  retrieve  router  decompose  facts
+            rerank  screener  watchlist  portfolio  insight  universe (open-universe registry
+            + ticker/name resolution)  ingest_jobs (async ingest orchestration + LRU eviction)
 app/agent/  executor  router_llm  router_plan  context  session
 app/tools/  filings  market  compute  screen  registry
 web/        Vite + React + TS frontend (src/components, src/hooks, src/lib)
 eval/       questions.yaml  questions_market.yaml  questions_hybrid.yaml  questions_v3.yaml  run_eval.py
 static/     index.html (legacy fallback)  dist/ (built SPA, gitignored)
 tests/
-data/       raw/  parsed/  chunks.json  facts.json  chroma/  manifest.json
+data/       raw/  parsed/  chunks.json  facts.json  chroma/  manifest.json  dynamic/ (on-demand
+            ingested companies, gitignored — see Deploy)
 ```
 
 All tunables are in `app/config.py`.
