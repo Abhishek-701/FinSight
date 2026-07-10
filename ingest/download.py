@@ -42,6 +42,14 @@ def load_cik_map() -> dict[str, str]:
     return out
 
 
+def load_ticker_titles() -> dict[str, str]:
+    """ticker (upper) -> EDGAR company title (e.g. "Tesla, Inc."). Same source file as
+    load_cik_map, fetched separately since the two are cached independently (app.universe) —
+    most requests only need one or the other."""
+    raw = json.loads(_get(TICKER_MAP_URL))
+    return {entry["ticker"].upper(): entry["title"] for entry in raw.values()}
+
+
 def latest_10k(cik: str) -> dict:
     """Return metadata for the most recent form exactly '10-K' (rejects 10-K/A amendments)."""
     subs = json.loads(_get(f"https://data.sec.gov/submissions/CIK{cik}.json"))

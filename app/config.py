@@ -132,6 +132,7 @@ DYNAMIC_REGISTRY_PATH = DYNAMIC_DIR / "registry.json"
 DYNAMIC_CHUNKS_DIR = DYNAMIC_DIR / "chunks"
 DYNAMIC_FACTS_DIR = DYNAMIC_DIR / "facts"
 DYNAMIC_CIK_MAP_PATH = DYNAMIC_DIR / "cik_map.json"
+DYNAMIC_TITLE_MAP_PATH = DYNAMIC_DIR / "title_map.json"
 
 # --- On-demand ingest (V4.1: ingest/pipeline.py, app/ingest_jobs.py) ---
 CIK_MAP_TTL_HOURS = 24

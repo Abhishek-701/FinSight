@@ -357,12 +357,10 @@ def company_ingest_stream(ticker: str, request: Request, x_api_key: str | None =
 
 @app.get("/api/universe/resolve")
 def universe_resolve(q: str, request: Request, x_api_key: str | None = Header(default=None)):
-    """Resolve a ticker symbol or $cashtag against the full EDGAR universe (not just what
-    we've ingested) — powers "is this a real company I can add?" before offering to ingest.
-
-    Matches ticker symbols/cashtags only, same as the chat-path resolver (app.universe.
-    resolve_ticker); free-text company-name search ("rivian" -> RIVN) isn't supported yet —
-    EDGAR's ticker map is cached as ticker->CIK only, without company titles.
+    """Resolve an EXACT ticker symbol or $cashtag against the full EDGAR universe (not just
+    what we've ingested) — mirrors the chat-path resolver (app.universe.resolve_ticker) so a
+    frontend can check "is this a real ticker?" with the same rules chat uses. For free-text
+    company-name search ("rivian" -> RIVN), use /api/universe/search instead.
     """
     _guard(request, x_api_key)
     resolved = universe.resolve_ticker(q)
@@ -375,6 +373,17 @@ def universe_resolve(q: str, request: Request, x_api_key: str | None = Header(de
         "cik": resolved["cik"],
         "ingested": resolved["ingested"],
     }
+
+
+@app.get("/api/universe/search")
+def universe_search(q: str, request: Request, x_api_key: str | None = Header(default=None)):
+    """Free-text search over ticker symbols AND EDGAR company titles — the sidebar search
+    box's name-discovery path. Ranked results, capped at 8; empty list (not 404) for no match
+    or a too-short query, since this is typeahead, not a single-answer lookup."""
+    _guard(request, x_api_key)
+    if len(q.strip()) < 1:
+        return {"results": []}
+    return {"results": universe.search_companies(q, limit=8)}
 
 
 @app.get("/api/corpus/status")

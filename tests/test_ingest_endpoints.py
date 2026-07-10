@@ -77,5 +77,22 @@ class UniverseResolveEndpointTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 404)
 
 
+class UniverseSearchEndpointTests(unittest.TestCase):
+    @patch("app.main.universe.search_companies")
+    def test_query_returns_ranked_results(self, mock_search):
+        mock_search.return_value = [{"ticker": "TSLA", "name": "Tesla, Inc.", "ingested": False}]
+        resp = client.get("/api/universe/search?q=tesla")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["results"][0]["ticker"], "TSLA")
+        mock_search.assert_called_once_with("tesla", limit=8)
+
+    def test_empty_query_returns_empty_list_without_calling_search(self):
+        with patch("app.main.universe.search_companies") as mock_search:
+            resp = client.get("/api/universe/search?q=")
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.json(), {"results": []})
+            mock_search.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

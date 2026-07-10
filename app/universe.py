@@ -162,7 +162,7 @@ def evict_ticker(ticker: str) -> None:
     facts_mod.invalidate()
 
 
-def _cik_map_is_fresh(path) -> bool:
+def _edgar_cache_is_fresh(path) -> bool:
     if not path.exists():
         return False
     return (time.time() - path.stat().st_mtime) < config.CIK_MAP_TTL_HOURS * 3600
@@ -184,7 +184,7 @@ def load_cik_map(force_refresh: bool = False) -> dict[str, str]:
     from ingest import download  # local import: keeps this module's default import surface light
 
     path = config.DYNAMIC_CIK_MAP_PATH
-    if not force_refresh and _cik_map_is_fresh(path):
+    if not force_refresh and _edgar_cache_is_fresh(path):
         mtime = path.stat().st_mtime
         if _cik_map_cache and _cik_map_cache[:2] == (str(path), mtime):
             return _cik_map_cache[2]
@@ -206,6 +206,82 @@ def lookup_cik(ticker: str) -> str | None:
     if ticker not in cik_map:
         cik_map = load_cik_map(force_refresh=True)
     return cik_map.get(ticker)
+
+
+# (path_str, mtime, data) — same process-lifetime caching pattern as _cik_map_cache above, for
+# ticker -> EDGAR company title. Kept as an independent cache/fetch (not merged into
+# load_cik_map) so the far more frequent chat-path lookup (lookup_cik, called on every
+# unrecognized-entity question) never pays for title data it doesn't need.
+_title_map_cache: tuple[str, float, dict] | None = None
+
+
+def load_title_map(force_refresh: bool = False) -> dict[str, str]:
+    """Ticker -> EDGAR company title (e.g. "Tesla, Inc."), disk- and memory-cached. Powers
+    search_companies() below — the frontend search box's name-discovery path."""
+    global _title_map_cache
+    from ingest import download
+
+    path = config.DYNAMIC_TITLE_MAP_PATH
+    if not force_refresh and _edgar_cache_is_fresh(path):
+        mtime = path.stat().st_mtime
+        if _title_map_cache and _title_map_cache[:2] == (str(path), mtime):
+            return _title_map_cache[2]
+        data = json.loads(path.read_text(encoding="utf-8"))
+        _title_map_cache = (str(path), mtime, data)
+        return data
+    title_map = download.load_ticker_titles()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(title_map), encoding="utf-8")
+    _title_map_cache = (str(path), path.stat().st_mtime, title_map)
+    return title_map
+
+
+def search_companies(query: str, limit: int = 8) -> list[dict]:
+    """Substring search over ticker symbols AND EDGAR company titles. This is the frontend
+    search box's name-discovery path ("rivian" -> RIVN); chat's resolve_ticker() intentionally
+    stays symbol/cashtag-only to avoid false positives in free-form prose.
+
+    EDGAR's directory has ~13k tickers, many sharing a common word ("Apple Inc." vs "Apple
+    iSports Group, Inc." vs "Pineapple Express Cannabis Co") — ranked so the well-known company
+    a retail user means comes first: ticker-exact, then casual-name-exact (via _short_name,
+    "Apple Inc." -> "Apple"), then title/ticker starts-with, then whole-word title match,
+    then loose substring-anywhere as the last-resort fallback. Within a tier, shorter titles
+    sort first (a proxy for "the canonical company", not a subsidiary/unrelated namesake).
+    """
+    q = query.strip().lower()
+    if not q:
+        return []
+    try:
+        titles = load_title_map()
+    except Exception:  # noqa: BLE001 - EDGAR/network failure -> empty results, never a 500
+        return []
+
+    word_re = re.compile(rf"\b{re.escape(q)}\b")
+
+    def rank(ticker: str, title: str) -> int:
+        t, low_title = ticker.lower(), title.lower()
+        if t == q:
+            return 0
+        if _short_name(title).lower() == q:
+            return 1
+        if low_title.startswith(q):
+            return 2
+        if t.startswith(q):
+            return 3
+        if word_re.search(low_title):
+            return 4
+        return 5  # loosest fallback: substring anywhere, e.g. "apple" inside "pineapple"
+
+    hits = [
+        (rank(ticker, title), len(title), ticker, title)
+        for ticker, title in titles.items()
+        if q in ticker.lower() or q in title.lower()
+    ]
+    hits.sort(key=lambda h: h[:3])
+    return [
+        {"ticker": ticker, "name": title, "ingested": is_ingested(ticker)}
+        for _, _, ticker, title in hits[:limit]
+    ]
 
 
 def resolve_ticker(text: str) -> dict | None:

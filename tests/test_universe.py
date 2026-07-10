@@ -243,5 +243,62 @@ class CikMapMemoryCacheTests(unittest.TestCase):
             mock_read_text.assert_not_called()  # served from memory, not disk
 
 
+class SearchCompaniesTests(unittest.TestCase):
+    """search_companies() — free-text name/ticker search, ranked, no live EDGAR calls."""
+
+    def setUp(self):
+        self._orig_title_map = config.DYNAMIC_TITLE_MAP_PATH
+        self._tmpdir = tempfile.TemporaryDirectory()
+        config.DYNAMIC_TITLE_MAP_PATH = Path(self._tmpdir.name) / "title_map.json"
+        universe._title_map_cache = None
+        self._patcher = patch(
+            "ingest.download.load_ticker_titles",
+            return_value={
+                "TSLA": "Tesla, Inc.", "RIVN": "Rivian Automotive, Inc.",
+                "AAPL": "Apple Inc.", "T": "AT&T Inc.",
+            },
+        )
+        self._patcher.start()
+
+    def tearDown(self):
+        self._patcher.stop()
+        config.DYNAMIC_TITLE_MAP_PATH = self._orig_title_map
+        universe._title_map_cache = None
+        self._tmpdir.cleanup()
+
+    def test_search_by_company_name(self):
+        results = universe.search_companies("tesla")
+        self.assertEqual(results[0]["ticker"], "TSLA")
+        self.assertEqual(results[0]["name"], "Tesla, Inc.")
+
+    def test_search_by_partial_ticker(self):
+        results = universe.search_companies("riv")
+        self.assertEqual(results[0]["ticker"], "RIVN")
+
+    def test_exact_ticker_match_ranks_first(self):
+        # "t" substring-matches AT&T's name/ticker AND Tesla's title ("Tesla, Inc." has no "t"
+        # at start but contains one); exact ticker match "T" (AT&T) must still rank first.
+        results = universe.search_companies("t")
+        self.assertEqual(results[0]["ticker"], "T")
+
+    def test_no_match_returns_empty_list(self):
+        self.assertEqual(universe.search_companies("zzzzznomatch"), [])
+
+    def test_empty_query_returns_empty_list_without_network_call(self):
+        with patch("ingest.download.load_ticker_titles") as mock_load:
+            self.assertEqual(universe.search_companies(""), [])
+            mock_load.assert_not_called()
+
+    def test_results_include_ingested_flag(self):
+        results = universe.search_companies("apple")
+        self.assertTrue(results[0]["ingested"])  # AAPL is a seed
+
+    def test_edgar_failure_returns_empty_list_not_raise(self):
+        self._patcher.stop()
+        with patch("ingest.download.load_ticker_titles", side_effect=RuntimeError("down")):
+            self.assertEqual(universe.search_companies("tesla"), [])
+        self._patcher.start()  # tearDown expects the patcher to still be running
+
+
 if __name__ == "__main__":
     unittest.main()
