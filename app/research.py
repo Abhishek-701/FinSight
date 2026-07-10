@@ -20,8 +20,14 @@ from app.agent.router_llm import route_tools
 # Matches both RAG chunk IDs (e.g. AAPL-0044) and XBRL chunk IDs (e.g. AAPL-XBRL-OperatingIncomeLoss).
 CITATION_RE = re.compile(r"\[([A-Z]{2,4}-[A-Za-z0-9_-]+)\]")
 
-CLARIFY_MSG = ("I can only answer about Apple, JPMorgan Chase, Walmart, Coca-Cola, NVIDIA, and "
-               "Caterpillar. Which company do you mean?")
+def _clarify_msg() -> str:
+    names = ", ".join(sorted(universe.active_companies().values()))
+    return f"I can only answer about {names}. Which company do you mean?"
+
+
+def _threshold_refusal_msg() -> str:
+    names = ", ".join(sorted(universe.active_companies().values()))
+    return f"I couldn't find this in the filings I cover ({names}), so I can't answer it."
 
 _SEGMENT_BAIL_RE = re.compile(
     r"\b(sam'?s?\s*club|data\s+center|datacenter|financial\s+products?\s+(segment|revenues?)|"
@@ -244,7 +250,7 @@ def prepare(question: str, route: dict | None = None) -> dict:
     meta = {"route": route, "sub_queries": [], "retrieval": [], "xbrl_hit": False}
 
     if mode == "clarify":
-        return _refusal("clarify", CLARIFY_MSG, meta)
+        return _refusal("clarify", _clarify_msg(), meta)
 
     if mode == "needs_ingest":
         return _offer_ingest(route["ticker"], meta)
@@ -271,12 +277,7 @@ def prepare(question: str, route: dict | None = None) -> dict:
                 all_chunks[chunk["chunk_id"]] = chunk
 
     if top_sims and max(top_sims) < config.DENSE_SIM_THRESHOLD:
-        return _refusal(
-            "threshold",
-            "I couldn't find this in the six filings I cover (Apple, JPMorgan Chase, Walmart, "
-            "Coca-Cola, NVIDIA, Caterpillar), so I can't answer it.",
-            meta,
-        )
+        return _refusal("threshold", _threshold_refusal_msg(), meta)
 
     chunks = sorted(all_chunks.values(), key=lambda c: c["fused_score"], reverse=True)
     meta["context_chunks"] = chunks[: config.MAX_CONTEXT_CHUNKS]
