@@ -144,7 +144,13 @@ def llm_route(question: str, route: dict) -> dict | None:
             model=config.ROUTER_MODEL,
             max_tokens=config.ROUTER_MAX_TOKENS,
             temperature=config.TEMPERATURE,
-            system=_SYSTEM,
+            # _SYSTEM is a static module constant — byte-identical on every call, so marking it
+            # cacheable is free and correct. Measured no-op today though: ~940 tokens, under
+            # Anthropic's ~1024-token minimum cacheable block size for this model (confirmed via
+            # a live call's usage.cache_* fields both reading 0) — left in place since it starts
+            # working the moment this prompt grows past that threshold (see synthesize._cached_system
+            # for the same finding). No behavior/quality change either way.
+            system=[{"type": "text", "text": _SYSTEM, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": f"Question: {question}"}],
             output_config={"format": {"type": "json_schema", "schema": _build_schema()}},
         )

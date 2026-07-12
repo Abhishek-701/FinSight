@@ -102,6 +102,24 @@ NEWS_GUIDANCE = (
 )
 
 
+def _cached_system() -> list[dict]:
+    """System prompt as a cache_control-annotated content block.
+
+    _system_prompt() is rebuilt per call (it reflects the live company roster) but is
+    byte-identical across every call within one process state — exactly what Anthropic's
+    prompt caching wants: cuts input-token cost on every call after the first within the
+    5-min ephemeral window. No effect on output/quality.
+
+    Measured no-op today: this prompt is ~790 tokens, under Anthropic's minimum cacheable
+    block size (~1024 tokens for this model) — confirmed via a live call's usage.cache_*
+    fields both reading 0. Left in place anyway: it's free, correct, and starts actually
+    saving the moment the prompt crosses that threshold (plausible as more guidance blocks
+    get added — see VALUATION_GUIDANCE/EXPLAIN_MOVE_GUIDANCE/NEWS_GUIDANCE below). Don't
+    assume it's saving anything without re-checking usage.cache_read_input_tokens.
+    """
+    return [{"type": "text", "text": _system_prompt(), "cache_control": {"type": "ephemeral"}}]
+
+
 def build_context(chunks: list[dict]) -> str:
     blocks = []
     for c in chunks:
@@ -184,7 +202,7 @@ def stream_answer(question: str, chunks: list[dict], guidance: str | None = None
         model=config.CHAT_MODEL,
         max_tokens=2000,
         temperature=config.TEMPERATURE,
-        system=_system_prompt(),
+        system=_cached_system(),
         messages=[{"role": "user", "content": user}],
     ) as stream:
         for text in stream.text_stream:
@@ -210,7 +228,7 @@ def stream_section(query: str, chunks: list[dict]):
         model=config.CHAT_MODEL,
         max_tokens=600,
         temperature=config.TEMPERATURE,
-        system=_system_prompt(),
+        system=_cached_system(),
         messages=[{"role": "user", "content": user}],
     ) as stream:
         for text in stream.text_stream:

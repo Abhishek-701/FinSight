@@ -21,3 +21,6 @@ venv/
 # frontend
 web/node_modules/
 static/dist/
+
+# eval response cache (disposable, regenerable — see eval/run_eval.py)
+eval/.cache/

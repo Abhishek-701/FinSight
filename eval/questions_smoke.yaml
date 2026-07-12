@@ -1,0 +1,77 @@
+# Smoke suite: one question per DISTINCT routing/synthesis mechanism (not one per XBRL-metric
+# variation — lookup/fiscal_year/units/multi_statement/computed_metric/year_over_year in
+# questions.yaml all exercise the same facts_lookup->synthesize path with different metrics, so
+# only one representative is kept here). Use this while iterating — "did my change break the
+# harness/routing shape" — cheap and fast. Run the full questions.yaml + questions_v3.yaml suites
+# once, live (--no-cache), before considering a phase done or committing synthesis/routing
+# changes; this file is not a substitute for that.
+#
+# Run: python eval/run_eval.py eval/questions_smoke.yaml eval/results_smoke.md eval/results_smoke.json
+
+- question: "What was Apple's total operating income for fiscal year 2025?"
+  category: lookup
+  note: "Smoke: XBRL facts_lookup -> synthesize path."
+
+- question: "Did JPMorgan Chase's provision for credit losses increase or decrease from 2024 to 2025, and by how much in dollar terms?"
+  category: year_over_year
+  note: "Smoke: annual_recent vs annual_prior XBRL comparison."
+
+- question: "What was NVIDIA's Data Center segment revenue for its fiscal year ended January 25, 2026?"
+  category: segment_lookup
+  note: "Smoke: segment questions bypass XBRL, go straight to filing_rag (SEGMENT_INTENT_RE)."
+
+- question: "Which of the six companies reported the highest operating income (or comparable metric) in their most recent fiscal year?"
+  category: comparison
+  note: "Smoke: decompose mode, multi_company_compare fan-out."
+
+- question: "What cybersecurity risks did Walmart disclose in its most recent 10-K filing?"
+  category: semantic
+  note: "Smoke: single-company RAG, no XBRL shortcut."
+
+- question: "What was Chase's total net revenue for fiscal year 2025?"
+  category: alias
+  note: "Smoke: router alias resolution ('Chase' -> JPM)."
+
+- question: "What was total revenue last year?"
+  category: router_clarify
+  note: "Smoke: no company named -> clarify refusal. No live LLM call at all (refuses before synthesis)."
+
+- question: "Compare Apple's and Tesla's most recent annual revenue."
+  category: router_edge
+  note: "Smoke: one in-corpus + one real-but-uningested company in the same question."
+
+- question: "What was Amazon's net income for its most recent fiscal year?"
+  category: refusal_needs_ingest
+  note: "Smoke: V4.1 open-universe needs_ingest path. No live LLM call (refuses before synthesis)."
+
+- question: "What was Zyntherix Corp's net income for its most recent fiscal year?"
+  category: refusal_oos
+  note: "Smoke: genuinely unresolvable entity -> Gate 1 threshold refusal. No live synthesis call."
+
+- question: "What is Apple's employee engagement or satisfaction score?"
+  category: refusal_undisclosed
+  note: "Smoke: in-corpus but undisclosed -> 'not found', not fabricated."
+
+- question: "Is NVIDIA expensive right now?"
+  category: valuation
+  note: "Smoke: V3 LLM-router valuation intent, facts+market+compute+screen fan-out."
+
+- question: "Why is NVIDIA down this month?"
+  category: explain_move
+  note: "Smoke: V3/V4.2 explain_move — market_history+quote+compute+news_headlines+filing_rag."
+
+- question: "What's the latest news on Apple?"
+  category: news
+  note: "Smoke: V4.2 standalone news intent."
+
+- question: "Give me an insight brief on Apple"
+  category: insight
+  note: "Smoke: company_insight + filing_rag bundle."
+
+- question: "What is NVIDIA's current stock price and latest reported revenue?"
+  category: hybrid
+  note: "Smoke: plain hybrid regression guard, unaffected by V3/V4 intent branches."
+
+- question: "Tell me about Walmart"
+  category: summary
+  note: "Smoke: 4-topic per-section summary shortcut, bypasses route_tools entirely."

@@ -5,9 +5,22 @@ Runs eval/questions.yaml through the pipeline and writes both:
   - a JSON report with deterministic regression checks
 
 Usage:  python eval/run_eval.py [questions.yaml] [results.md] [results.json]
+        python eval/run_eval.py --only 3,7,12
+        python eval/run_eval.py --category valuation,news
+        python eval/run_eval.py --no-cache          # force live calls, bypass the disk cache
+        python eval/run_eval.py --model claude-haiku-4-5   # cheap iteration only, never for
+                                                             # the acceptance run (see README)
+
+Every live call is disk-cached in eval/.cache/ keyed on (question, category, model, threshold,
+corpus version, reranker/router flags) — a rerun where nothing relevant changed costs nothing.
+Use --no-cache for the one run that must reflect current reality (before a commit that touches
+synthesis/routing/prompt code).
 """
 
+import argparse
+import hashlib
 import json
+import os
 import re
 import sys
 from datetime import date
@@ -16,11 +29,12 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from app import config, main  # noqa: E402
+from app import config, corpus, main  # noqa: E402
 
 DEFAULT_Q = Path(__file__).parent / "questions.yaml"
 DEFAULT_OUT = Path(__file__).parent / "results.md"
 DEFAULT_JSON = Path(__file__).parent / "results.json"
+CACHE_DIR = Path(__file__).parent / ".cache"
 PASS_THRESHOLD = 0.80
 
 # Catches the clearest violations of "a filing or news headline is never a verified cause of a
@@ -32,6 +46,36 @@ _CAUSATION_RE = re.compile(
     r"(the )?(filing|10-K|news|headline) (caused|is why|led to))\b",
     re.I,
 )
+
+
+def _cache_key(question: str, category: str) -> str:
+    """Everything that could change the correct answer for this question, right now."""
+    parts = [
+        question, category, config.CHAT_MODEL, str(config.DENSE_SIM_THRESHOLD),
+        corpus.version() or "", os.getenv("FINSIGHT_USE_RERANKER", ""),
+        str(config.USE_LLM_ROUTER), config.ROUTER_MODEL,
+    ]
+    raw = "\x1f".join(parts)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _cache_path(key: str) -> Path:
+    return CACHE_DIR / f"{key}.json"
+
+
+def _load_cached(key: str) -> dict | None:
+    path = _cache_path(key)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _save_cache(key: str, res: dict) -> None:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    _cache_path(key).write_text(json.dumps(res), encoding="utf-8")
 
 
 def _md_escape(s: str) -> str:
@@ -299,103 +343,168 @@ def _score(item: dict, res: dict) -> dict:
     }
 
 
-def run(qpath: Path, outpath: Path, jsonpath: Path) -> None:
-    items = yaml.safe_load(qpath.read_text(encoding="utf-8"))
-    if not items:
+def run(
+    qpath: Path, outpath: Path, jsonpath: Path,
+    only: set[int] | None = None, categories: set[str] | None = None,
+    no_cache: bool = False, model_override: str | None = None,
+) -> None:
+    all_items = yaml.safe_load(qpath.read_text(encoding="utf-8"))
+    if not all_items:
         raise SystemExit(f"No questions found in {qpath}")
 
+    # id = 1-based position in the YAML file, preserved even when filtering, so --only 7
+    # unambiguously means "question 7 in questions.yaml" and reports stay cross-referenceable.
+    numbered = list(enumerate(all_items, 1))
+    if only:
+        numbered = [(i, it) for i, it in numbered if i in only]
+    if categories:
+        numbered = [(i, it) for i, it in numbered if it.get("category", "") in categories]
+    if not numbered:
+        raise SystemExit("No questions matched --only/--category filters")
+
+    orig_chat_model = config.CHAT_MODEL
+    if model_override:
+        config.CHAT_MODEL = model_override
+        print(f"NOTE: using {model_override} instead of {orig_chat_model} — "
+              f"structural-check iteration only, not a valid acceptance run.\n")
+
     rows, details, json_rows = [], [], []
-    for i, it in enumerate(items, 1):
-        q = it["question"]
-        cat = it.get("category", "")
-        print(f"[{i}/{len(items)}] {q[:70]}")
-        res = main.answer(q)
-        score = _score(it, res)
-        top = max((r["top_sim"] for r in res.get("retrieval", [])), default=0.0)
-        refused = res.get("refused", False)
-        reason = res.get("refusal_reason", "") if refused else ""
-        cites = ", ".join(res.get("citations", []))
-        gaps = ", ".join(res.get("gaps", []))
-        plan_actions = ", ".join(a["tool"] for a in res.get("plan", {}).get("actions", []))
-        tool_status = ", ".join(f"{t['tool']}:{t['status']}" for t in res.get("tool_calls", []))
+    n_cached = 0
+    try:
+        for i, it in numbered:
+            q = it["question"]
+            cat = it.get("category", "")
+            key = _cache_key(q, cat)
+            cached = None if no_cache else _load_cached(key)
+            if cached is not None:
+                res = cached
+                n_cached += 1
+                print(f"[{i}/{len(all_items)}] (cached) {q[:70]}")
+            else:
+                print(f"[{i}/{len(all_items)}] {q[:70]}")
+                res = main.answer(q)
+                _save_cache(key, res)
+            score = _score(it, res)
+            top = max((r["top_sim"] for r in res.get("retrieval", [])), default=0.0)
+            refused = res.get("refused", False)
+            reason = res.get("refusal_reason", "") if refused else ""
+            cites = ", ".join(res.get("citations", []))
+            gaps = ", ".join(res.get("gaps", []))
+            plan_actions = ", ".join(a["tool"] for a in res.get("plan", {}).get("actions", []))
+            tool_status = ", ".join(f"{t['tool']}:{t['status']}" for t in res.get("tool_calls", []))
 
-        rows.append(
-            f"| {i} | {_md_escape(cat)} | {_md_escape(q)} | {res['route']['mode']} | "
-            f"{'yes' if refused else 'no'} | {reason} | {top:.3f} | {_md_escape(cites)} | "
-            f"{_md_escape(gaps)} | {'yes' if score['passed'] else 'no'} | "
-            f"{'yes' if score['expected_fail'] else 'no'} | {_md_escape(plan_actions)} |"
+            rows.append(
+                f"| {i} | {_md_escape(cat)} | {_md_escape(q)} | {res['route']['mode']} | "
+                f"{'yes' if refused else 'no'} | {reason} | {top:.3f} | {_md_escape(cites)} | "
+                f"{_md_escape(gaps)} | {'yes' if score['passed'] else 'no'} | "
+                f"{'yes' if score['expected_fail'] else 'no'} | {_md_escape(plan_actions)} |"
+            )
+
+            sub = "\n".join(f"  - {r['ticker']}: sim={r['top_sim']:.3f}  q={r['query']!r}"
+                            for r in res.get("retrieval", []))
+            note = it.get("note", "")
+            checks = "\n".join(
+                f"  - [{'x' if c['passed'] else ' '}] {c['name']}: {c['detail']}"
+                for c in score["checks"]
+            )
+            details.append(
+                f"### {i}. {q}\n"
+                f"- **category:** {cat}  |  **route:** {res['route']['mode']}  |  "
+                f"**refused:** {refused} ({reason})  |  **top_sim:** {top:.3f}  |  "
+                f"**passed:** {score['passed']}\n"
+                + (f"- **your note:** {note}\n" if note else "")
+                + (f"- **plan:** {plan_actions}\n" if plan_actions else "")
+                + (f"- **tools:** {tool_status}\n" if tool_status else "")
+                + (f"- **checks:**\n{checks}\n" if checks else "")
+                + (f"- **sub-queries:**\n{sub}\n" if sub else "")
+                + f"- **citations:** {cites or '(none)'}  |  **gaps:** {gaps or '(none)'}\n\n"
+                f"**Answer:**\n\n{res['answer']}\n"
+            )
+            json_rows.append({
+                "id": i,
+                "category": cat,
+                "question": q,
+                "route": res["route"],
+                "refused": refused,
+                "refusal_reason": reason,
+                "top_sim": top,
+                "citations": res.get("citations", []),
+                "gaps": res.get("gaps", []),
+                "plan": res.get("plan", {}),
+                "tool_calls": res.get("tool_calls", []),
+                "reflection": res.get("reflection", {}),
+                "score": score,
+                "answer": res["answer"],
+            })
+
+        passed_count = sum(1 for row in json_rows if row["score"]["passed"])
+        pass_rate = passed_count / len(json_rows)
+        suite_passed = pass_rate >= PASS_THRESHOLD
+
+        header = (
+            f"# Eval results\n\n"
+            f"Generated {date.today().isoformat()} - model `{config.CHAT_MODEL}` - "
+            f"dense-similarity threshold {config.DENSE_SIM_THRESHOLD}\n\n"
+            f"Automated pass rate: **{passed_count}/{len(json_rows)} ({pass_rate:.0%})**. "
+            f"Suite threshold: **{PASS_THRESHOLD:.0%}**. "
+            f"Suite status: **{'PASS' if suite_passed else 'FAIL'}**. "
+            f"({n_cached}/{len(json_rows)} served from cache.)\n\n"
+            f"Checks are deterministic regression signals; use the answers below for deeper human review.\n\n"
+            f"| # | cat | question | route | refused | reason | top_sim | citations | gaps | "
+            f"passed | expected_fail | plan |\n"
+            f"|---|-----|----------|-------|---------|--------|---------|-----------|------|"
+            f"-------|---------------|------|\n"
         )
+        body = "\n".join(rows)
+        detail = "\n\n## Answers (for grading)\n\n" + "\n---\n\n".join(details)
+        outpath.write_text(header + body + "\n" + detail, encoding="utf-8")
+        jsonpath.write_text(json.dumps({
+            "generated": date.today().isoformat(),
+            "model": config.CHAT_MODEL,
+            "threshold": PASS_THRESHOLD,
+            "pass_rate": pass_rate,
+            "passed": suite_passed,
+            "results": json_rows,
+        }, indent=2), encoding="utf-8")
+        print(f"\nWrote {outpath} and {jsonpath} ({len(numbered)} questions, "
+              f"{n_cached} cached).")
+    finally:
+        config.CHAT_MODEL = orig_chat_model
 
-        sub = "\n".join(f"  - {r['ticker']}: sim={r['top_sim']:.3f}  q={r['query']!r}"
-                        for r in res.get("retrieval", []))
-        note = it.get("note", "")
-        checks = "\n".join(
-            f"  - [{'x' if c['passed'] else ' '}] {c['name']}: {c['detail']}"
-            for c in score["checks"]
-        )
-        details.append(
-            f"### {i}. {q}\n"
-            f"- **category:** {cat}  |  **route:** {res['route']['mode']}  |  "
-            f"**refused:** {refused} ({reason})  |  **top_sim:** {top:.3f}  |  "
-            f"**passed:** {score['passed']}\n"
-            + (f"- **your note:** {note}\n" if note else "")
-            + (f"- **plan:** {plan_actions}\n" if plan_actions else "")
-            + (f"- **tools:** {tool_status}\n" if tool_status else "")
-            + (f"- **checks:**\n{checks}\n" if checks else "")
-            + (f"- **sub-queries:**\n{sub}\n" if sub else "")
-            + f"- **citations:** {cites or '(none)'}  |  **gaps:** {gaps or '(none)'}\n\n"
-            f"**Answer:**\n\n{res['answer']}\n"
-        )
-        json_rows.append({
-            "id": i,
-            "category": cat,
-            "question": q,
-            "route": res["route"],
-            "refused": refused,
-            "refusal_reason": reason,
-            "top_sim": top,
-            "citations": res.get("citations", []),
-            "gaps": res.get("gaps", []),
-            "plan": res.get("plan", {}),
-            "tool_calls": res.get("tool_calls", []),
-            "reflection": res.get("reflection", {}),
-            "score": score,
-            "answer": res["answer"],
-        })
 
-    passed_count = sum(1 for row in json_rows if row["score"]["passed"])
-    pass_rate = passed_count / len(json_rows)
-    suite_passed = pass_rate >= PASS_THRESHOLD
+def _parse_ids(raw: str) -> set[int]:
+    return {int(x.strip()) for x in raw.split(",") if x.strip()}
 
-    header = (
-        f"# Eval results\n\n"
-        f"Generated {date.today().isoformat()} - model `{config.CHAT_MODEL}` - "
-        f"dense-similarity threshold {config.DENSE_SIM_THRESHOLD}\n\n"
-        f"Automated pass rate: **{passed_count}/{len(json_rows)} ({pass_rate:.0%})**. "
-        f"Suite threshold: **{PASS_THRESHOLD:.0%}**. "
-        f"Suite status: **{'PASS' if suite_passed else 'FAIL'}**.\n\n"
-        f"Checks are deterministic regression signals; use the answers below for deeper human review.\n\n"
-        f"| # | cat | question | route | refused | reason | top_sim | citations | gaps | "
-        f"passed | expected_fail | plan |\n"
-        f"|---|-----|----------|-------|---------|--------|---------|-----------|------|"
-        f"-------|---------------|------|\n"
+
+def _parse_categories(raw: str) -> set[str]:
+    return {x.strip() for x in raw.split(",") if x.strip()}
+
+
+def _parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Eval runner for the research MVP.")
+    p.add_argument("questions", nargs="?", default=str(DEFAULT_Q))
+    p.add_argument("results_md", nargs="?", default=str(DEFAULT_OUT))
+    p.add_argument("results_json", nargs="?", default=str(DEFAULT_JSON))
+    p.add_argument("--only", help="Comma-separated 1-based question ids, e.g. --only 3,7,12")
+    p.add_argument("--category", help="Comma-separated categories, e.g. --category valuation,news")
+    p.add_argument("--no-cache", action="store_true", help="Force live calls, bypass the disk cache")
+    p.add_argument(
+        "--model",
+        help="Override config.CHAT_MODEL for this run only — cheap structural-check iteration "
+             "(tool selection, citation presence), NOT valid for the acceptance run.",
     )
-    body = "\n".join(rows)
-    detail = "\n\n## Answers (for grading)\n\n" + "\n---\n\n".join(details)
-    outpath.write_text(header + body + "\n" + detail, encoding="utf-8")
-    jsonpath.write_text(json.dumps({
-        "generated": date.today().isoformat(),
-        "model": config.CHAT_MODEL,
-        "threshold": PASS_THRESHOLD,
-        "pass_rate": pass_rate,
-        "passed": suite_passed,
-        "results": json_rows,
-    }, indent=2), encoding="utf-8")
-    print(f"\nWrote {outpath} and {jsonpath} ({len(items)} questions).")
+    return p.parse_args()
 
 
 if __name__ == "__main__":
-    qpath = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_Q
-    outpath = Path(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_OUT
-    jsonpath = Path(sys.argv[3]) if len(sys.argv) > 3 else DEFAULT_JSON
-    run(qpath, outpath, jsonpath)
+    args = _parse_args()
+    qpath = Path(args.questions)
+    outpath = Path(args.results_md)
+    jsonpath = Path(args.results_json)
+    run(
+        qpath, outpath, jsonpath,
+        only=_parse_ids(args.only) if args.only else None,
+        categories=_parse_categories(args.category) if args.category else None,
+        no_cache=args.no_cache,
+        model_override=args.model,
+    )
