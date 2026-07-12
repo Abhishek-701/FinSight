@@ -26,13 +26,13 @@ except ImportError:  # pragma: no cover
 
 _client = anthropic.Anthropic()
 
-_INTENTS = ["valuation", "explain_move", "insight", "hybrid", "filings_only", "market_only"]
+_INTENTS = ["valuation", "explain_move", "insight", "news", "hybrid", "filings_only", "market_only"]
 
 # Tools the LLM router may plan. refuse_or_clarify is deterministic-only (router.py already
 # decides clarify/oos before the LLM router ever fires).
 _PLANNABLE_TOOLS = [
     "facts_lookup", "filing_rag", "multi_company_compare", "market_quote", "market_history",
-    "compute_metric", "screen_companies", "company_insight",
+    "news_headlines", "compute_metric", "screen_companies", "company_insight",
 ]
 
 _PLAN_CACHE = TTLCache(maxsize=256, ttl=config.ROUTER_CACHE_TTL_SECONDS) if TTLCache else {}
@@ -88,6 +88,9 @@ _SYSTEM = (
     "filing, not just a number.\n"
     "- market_quote(ticker): live/delayed price, market cap, change.\n"
     "- market_history(ticker, period): OHLCV price history over 1mo/3mo/6mo/1y.\n"
+    "- news_headlines(ticker): recent third-party news headlines. Reported context only — "
+    "never a verified cause of a price move. Use for explain_move (place it alongside market "
+    "evidence, before filing_rag) and for plain 'what's the news on X' questions.\n"
     "- compute_metric(metric): pe_ratio, ps_ratio, price_change, or market_cap_to_revenue — "
     "computed from evidence gathered by EARLIER actions in your plan, so always place a "
     "facts_lookup/market_quote/market_history action before the compute_metric action(s) that "
@@ -99,8 +102,8 @@ _SYSTEM = (
     "company. Use for 'give me a brief/overview/snapshot on <company>' requests, paired with a "
     "filing_rag call for narrative context.\n\n"
     "Pick intent: valuation (is X expensive/cheap, P/E, P/S), explain_move (why did the stock "
-    "move), insight (full brief/snapshot on one company), hybrid (mixes filing + market data "
-    "some other way), filings_only, or market_only.\n\n"
+    "move), insight (full brief/snapshot on one company), news (plain 'what's the news on X'), "
+    "hybrid (mixes filing + market data some other way), filings_only, or market_only.\n\n"
     "Keep plans short (2-5 actions) and put evidence-gathering actions before any compute_metric "
     "that depends on them. Do not invent tools or values outside the enums.\n\n"
     "Examples:\n"
@@ -110,8 +113,10 @@ _SYSTEM = (
     "compute_metric(metric=ps_ratio), screen_companies(metric=ps_ratio, order=asc)]\n"
     "Q: 'Why is NVIDIA down this month?' -> intent=explain_move, actions=["
     "market_history(ticker=NVDA, period=1mo), market_quote(ticker=NVDA), "
-    "compute_metric(metric=price_change), "
+    "compute_metric(metric=price_change), news_headlines(ticker=NVDA), "
     "filing_rag(question='NVIDIA risk factors demand competition segments outlook')]\n"
+    "Q: 'What's the latest news on Apple?' -> intent=news, actions=["
+    "news_headlines(ticker=AAPL)]\n"
     "Q: 'Give me an insight brief on Apple' -> intent=insight, actions=["
     "company_insight(ticker=AAPL), "
     "filing_rag(question='Apple business overview products strategy risks outlook')]\n"
@@ -157,7 +162,7 @@ def _args_for(tool: str, action: dict) -> dict | None:
         return {"metrics": action["metrics"]} if action.get("metrics") else {}
     if tool in ("filing_rag", "multi_company_compare"):
         return {"question": action["question"]} if action.get("question") else {}
-    if tool in ("market_quote", "company_insight"):
+    if tool in ("market_quote", "company_insight", "news_headlines"):
         return {"ticker": action["ticker"]} if action.get("ticker") else None
     if tool == "market_history":
         if not action.get("ticker"):

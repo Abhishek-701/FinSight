@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import type { InsightState } from '../hooks/useInsight'
 import { markCitations, money, num, pct } from '../lib/format'
+import NewsPanel from './NewsPanel'
 import Sparkline from './Sparkline'
 
 const RANK_LABELS: Record<string, string> = {
@@ -149,6 +150,7 @@ export default function InsightCard({ state }: { state: InsightState }) {
       <QuoteStrip state={state} />
       <ValuationGrid state={state} />
       <FundamentalsRow state={state} />
+      <NewsPanel items={state.card.news} />
       <div className="narrative">
         <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
           {markCitations(state.narrative)}

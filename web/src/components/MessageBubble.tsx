@@ -3,7 +3,7 @@ import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import { markCitations, money } from '../lib/format'
 import type { ChatTurn } from '../hooks/useChat'
-import type { HistoryRow } from '../lib/types'
+import type { HistoryRow, NewsItem } from '../lib/types'
 import Sparkline from './Sparkline'
 import { useTickerIngest } from '../hooks/useTickerIngest'
 import IngestProgress from './IngestProgress'
@@ -87,10 +87,21 @@ function Sources({ turn }: { turn: ChatTurn }) {
       {turn.citationDetails.map((d) => (
         <details className="source-detail" key={d.chunk_id}>
           <summary>
+            {d.kind === 'news' && <span className="news-badge">news</span>}
             {d.chunk_id} — {d.company}
             {d.section ? ` — ${d.section}` : ''}
           </summary>
-          <pre>{d.text}</pre>
+          {d.kind === 'news' ? (
+            <div className="news-source-links">
+              {((d.data?.items as NewsItem[] | undefined) ?? []).map((item, i) => (
+                <a href={item.url || undefined} target="_blank" rel="noreferrer" key={`${item.title}-${i}`}>
+                  {item.title} <span className="muted">— {item.publisher}</span>
+                </a>
+              ))}
+            </div>
+          ) : (
+            <pre>{d.text}</pre>
+          )}
         </details>
       ))}
     </>

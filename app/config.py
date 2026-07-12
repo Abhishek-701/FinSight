@@ -75,8 +75,9 @@ EXPLAIN_MOVE_INTENT_RE = (
     r"jump(ed)?|spike[ds]?|slid(e)?|sank|mov(e|ed|ing)|sell.?off)\b"
 )
 INSIGHT_INTENT_RE = r"\b(insight\s+brief|company\s+brief|full\s+(picture|brief|report)|deep\s+dive|snapshot)\b"
+NEWS_INTENT_RE = r"\b(news|headlines?|in the news|what happened (to|with)|latest on|catalysts?)\b"
 LLM_ROUTER_TRIGGER_RE = "|".join(
-    (VALUATION_INTENT_RE, EXPLAIN_MOVE_INTENT_RE, INSIGHT_INTENT_RE)
+    (VALUATION_INTENT_RE, EXPLAIN_MOVE_INTENT_RE, INSIGHT_INTENT_RE, NEWS_INTENT_RE)
 )
 
 INSIGHT_HISTORY_PERIOD = "3mo"     # trend window for the insight brief
@@ -108,6 +109,14 @@ MARKET_INTENT_RE = (
     r"last close|previous close|52.week|pe ratio|p/e|price)\b"
 )
 MARKET_DISCLAIMER = "Market data is provided by yfinance and may be delayed; not investment advice."
+
+# --- News (V4.2) ---
+NEWS_PROVIDER = os.getenv("FINSIGHT_NEWS_PROVIDER", "yfinance")
+NEWS_CACHE_TTL_SECONDS = 900  # 15min — headlines don't need quote-level freshness
+NEWS_MAX_ITEMS = 8
+NEWS_DISCLAIMER = (
+    "Headlines are third-party reports, shown as context — not verified causes of any price move."
+)
 
 # --- API / production controls ---
 API_KEY = os.getenv("FINSIGHT_API_KEY", "")

@@ -40,9 +40,11 @@ class DeterministicV3RouterTests(unittest.TestCase):
         self.assertEqual(plan["intent"], "explain_move")
         tools = [a["tool"] for a in plan["actions"]]
         self.assertEqual(tools, ["market_history", "market_quote", "compute_metric",
-                                  "filing_rag", "synthesize_report"])
+                                  "news_headlines", "filing_rag", "synthesize_report"])
         history_action = plan["actions"][0]
         self.assertEqual(history_action["args"]["period"], "1mo")
+        news_action = next(a for a in plan["actions"] if a["tool"] == "news_headlines")
+        self.assertEqual(news_action["args"]["ticker"], "NVDA")
         rag_action = next(a for a in plan["actions"] if a["tool"] == "filing_rag")
         self.assertIn("risk factors", rag_action["args"]["question"])
 

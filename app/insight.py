@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 
 from app import config, facts, retrieve, screener, synthesize, universe
 from app.research import CITATION_RE, _citation_payload, _elapsed, sse
-from app.tools import compute, market
+from app.tools import compute, market, news as news_tool
 
 _NARRATIVE_TOPICS: list[tuple[str, str]] = [
     ("business overview main products strategy growth outlook", "Business & Outlook"),
@@ -93,6 +93,10 @@ def build_brief_data(ticker: str) -> dict:
             valuation["price_change"] = change["data"]
             evidence.extend(change["evidence"])
 
+    news_result = news_tool.news_headlines(ticker)
+    news_items = news_result.get("data", {}).get("items", [])
+    evidence.extend(news_result.get("evidence", []))
+
     return {
         "ticker": ticker,
         "company": company,
@@ -102,6 +106,7 @@ def build_brief_data(ticker: str) -> dict:
         "fundamentals": fundamentals,
         "valuation": valuation,
         "ranks": ranks,
+        "news": news_items,
         "disclaimer": config.MARKET_DISCLAIMER,
         "evidence": evidence,
         "market_status": market_status,
@@ -124,7 +129,7 @@ def company_insight(ticker: str | None = None, question: str | None = None,
 
 
 _CARD_KEYS = ("ticker", "company", "as_of", "quote", "history", "fundamentals",
-             "valuation", "ranks", "disclaimer", "market_status")
+             "valuation", "ranks", "news", "disclaimer", "market_status")
 
 
 def _valuation_paragraph(data: dict) -> str:

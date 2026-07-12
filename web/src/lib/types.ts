@@ -187,6 +187,14 @@ export interface RankInfo {
   value: number
 }
 
+export interface NewsItem {
+  title: string
+  publisher: string
+  published_at: string
+  url: string
+  summary: string
+}
+
 export interface InsightCardData {
   ticker: string
   company: string
@@ -200,6 +208,7 @@ export interface InsightCardData {
     price_change?: ValuationMetric
   }
   ranks: Record<string, RankInfo>
+  news: NewsItem[]
   disclaimer: string
   market_status: 'ok' | 'unavailable'
 }

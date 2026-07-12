@@ -8,6 +8,7 @@ Usage:  python eval/run_eval.py [questions.yaml] [results.md] [results.json]
 """
 
 import json
+import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -22,6 +23,16 @@ DEFAULT_OUT = Path(__file__).parent / "results.md"
 DEFAULT_JSON = Path(__file__).parent / "results.json"
 PASS_THRESHOLD = 0.80
 
+# Catches the clearest violations of "a filing or news headline is never a verified cause of a
+# price move" (see synthesize.EXPLAIN_MOVE_GUIDANCE). Not exhaustive — subtler causal phrasing
+# needs human review of the answer text, same caveat as the rest of this deterministic suite.
+_CAUSATION_RE = re.compile(
+    r"\b(caused (the|a) (drop|decline|rally|surge|jump|rise|fall)|"
+    r"(because|due to) (the )?(filing|10-K|news|headline|report)|"
+    r"(the )?(filing|10-K|news|headline) (caused|is why|led to))\b",
+    re.I,
+)
+
 
 def _md_escape(s: str) -> str:
     return s.replace("|", "\\|").replace("\n", " ").strip()
@@ -33,7 +44,7 @@ def _add_check(checks: list[dict], name: str, passed: bool, detail: str) -> None
 
 def _expected_refusal(item: dict) -> bool | None:
     category = item.get("category", "")
-    if category in {"router_clarify", "refusal_oos"}:
+    if category in {"router_clarify", "refusal_oos", "refusal_needs_ingest"}:
         return True
     if category == "router_edge":
         return None
@@ -73,6 +84,22 @@ def _score(item: dict, res: dict) -> dict:
             "oos_reason",
             res.get("refusal_reason") == "threshold",
             f"reason={res.get('refusal_reason', '')}",
+        )
+
+    if category == "refusal_needs_ingest":
+        # V4.1: a real, resolvable-but-uningested company (e.g. Amazon) now gets an actionable
+        # ingest offer instead of a flat oos refusal — action/ticker must be present too.
+        _add_check(
+            checks,
+            "needs_ingest_reason",
+            res.get("refusal_reason") == "needs_ingest",
+            f"reason={res.get('refusal_reason', '')}",
+        )
+        _add_check(
+            checks,
+            "needs_ingest_action",
+            res.get("action") == "offer_ingest" and bool(res.get("ticker")),
+            f"action={res.get('action', '')} ticker={res.get('ticker', '')}",
         )
 
     if category == "refusal_undisclosed":
@@ -170,7 +197,7 @@ def _score(item: dict, res: dict) -> dict:
         _add_check(
             checks,
             "filing_citation_present",
-            any("-MKT-" not in c and "-CALC-" not in c for c in citations),
+            any("-MKT-" not in c and "-CALC-" not in c and "-NEWS-" not in c for c in citations),
             f"citations={citations}",
         )
         _add_check(
@@ -179,9 +206,51 @@ def _score(item: dict, res: dict) -> dict:
             "as of" in res.get("answer", "").lower(),
             "explain-move answers should state quote freshness",
         )
-        # Causal-language leakage ("caused", "because of", "due to" tying a filing risk to the
-        # price move) is not reliably checkable with a deterministic string match — graded by
-        # human review of the answer in results_v3.md, per the guidance in synthesize.py.
+        news_call = next((t for t in res.get("tool_calls", []) if t.get("tool") == "news_headlines"), None)
+        _add_check(
+            checks,
+            "news_evidence_present",
+            # V4.2: explain_move always plans news_headlines now; a "-NEWS-" citation or the
+            # tool having run at all (it may legitimately find zero headlines) both count.
+            any("-NEWS-" in c for c in citations) or news_call is not None,
+            f"news_citations={[c for c in citations if '-NEWS-' in c]}; news_tool_called={news_call is not None}",
+        )
+        _add_check(
+            checks,
+            "no_causation_language",
+            not _CAUSATION_RE.search(res.get("answer", "")),
+            "explain-move answers must not claim a filing or news headline caused the price move",
+        )
+    if category == "news":
+        news_citations = [c for c in citations if "-NEWS-" in c]
+        _add_check(
+            checks,
+            "news_citation_present",
+            bool(news_citations),
+            f"citations={citations}",
+        )
+        # The model's exact attribution phrasing varies run to run ("reported by X", "X reports",
+        # "— X, <date>", ...) — regexing one phrasing is fragile. Instead check that at least
+        # one REAL publisher name from the news evidence itself (data.items[].publisher, e.g.
+        # "Barchart", "Motley Fool") appears literally in the answer — phrasing-agnostic.
+        news_detail = next((d for d in res.get("citation_details", []) if d.get("kind") == "news"), None)
+        publishers = [
+            it.get("publisher", "") for it in (news_detail or {}).get("data", {}).get("items", [])
+            if it.get("publisher")
+        ]
+        answer_text = res.get("answer", "")
+        _add_check(
+            checks,
+            "attribution_present",
+            any(pub in answer_text for pub in publishers),
+            f"publishers_in_evidence={publishers}",
+        )
+        _add_check(
+            checks,
+            "no_causation_language",
+            not _CAUSATION_RE.search(res.get("answer", "")),
+            "news answers must not claim a headline caused a price move",
+        )
 
     if category == "insight":
         _add_check(
@@ -209,7 +278,10 @@ def _score(item: dict, res: dict) -> dict:
         "plan and tool_calls should be present",
     )
 
-    if reflection:
+    if reflection and not refused:
+        # Gated on not-refused like citations_present above: a refusal/offer message can
+        # incidentally contain a digit (e.g. "fetch its latest 10-K") without making a numeric
+        # CLAIM that needs evidence — this check is about answers, not refusal text.
         _add_check(
             checks,
             "numeric_claim_cited",

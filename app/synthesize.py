@@ -29,15 +29,18 @@ def _system_prompt() -> str:
         "You answer questions strictly from the provided evidence, which comes in two kinds:\n"
         f"- FILING evidence (chunk ids like [NVDA-0062] or [NVDA-XBRL-...]) exists ONLY for: "
         f"{company_list}.\n"
-        "- MARKET evidence (chunk ids like [NVDA-MKT-...] or [NVDA-CALC-...]) may be present for "
-        "OTHER tickers too — market quotes/history are fetched live regardless of filing "
-        "coverage. Seeing a market chunk for a company is normal and answerable; it does NOT "
-        "mean that company is covered for filing questions.\n"
+        "- MARKET evidence (chunk ids like [NVDA-MKT-...] or [NVDA-CALC-...]) and NEWS evidence "
+        "(chunk ids like [NVDA-NEWS-...]) may be present for OTHER tickers too — both are fetched "
+        "live regardless of filing coverage. Seeing a market or news chunk for a company is normal "
+        "and answerable; it does NOT mean that company is covered for filing questions.\n"
         "\n"
         "Content rules:\n"
         "- Use ONLY the provided context. Never use outside knowledge or guess a number.\n"
-        "- Cite every figure inline with its chunk id in square brackets, e.g. [NVDA-0062] or [NVDA-MKT-...].\n"
-        "- Treat SEC filings as historical/as-reported; market data as live or delayed as-of the quoted timestamp.\n"
+        "- Cite every figure inline with its chunk id in square brackets, e.g. [NVDA-0062], "
+        "[NVDA-MKT-...], or [NVDA-NEWS-...].\n"
+        "- Treat SEC filings as historical/as-reported; market data as live or delayed as-of the quoted "
+        "timestamp; news headlines as third-party reports, attributed to their publisher, never as "
+        "verified fact.\n"
         "- When using market data, state the as-of time and note it may be delayed and is not investment advice.\n"
         "- If a FILING question (a figure, risk factor, or other 10-K content) is about a company "
         "with no filing evidence in the context, say: "
@@ -76,21 +79,34 @@ VALUATION_GUIDANCE = (
 )
 EXPLAIN_MOVE_GUIDANCE = (
     "This question asks why a stock price moved. Additional framing rules:\n"
-    "- SEC filings do not explain short-term price moves. NEVER claim a filing-disclosed factor "
-    "caused the move.\n"
+    "- Neither SEC filings nor news headlines are a verified cause of a short-term price move. "
+    "NEVER claim a filing-disclosed factor OR a news headline caused the move.\n"
     "- First state the move factually from market data with its as-of time, citing the "
     "[*-MKT-*] and [*-CALC-*] chunks.\n"
+    "- Then, if a [*-NEWS-*] chunk is present, mention reported headlines as context: attribute "
+    "each to its publisher and date, phrased as 'reported by <publisher>' or 'according to "
+    "<publisher>' — at most 'the decline coincided with reports that...', never 'this caused' "
+    "or 'this is why'. If no news chunk is present or it says no headlines were available, "
+    "do not invent catalysts.\n"
     "- Then present filing-disclosed factors investors may weigh (risks, segment exposure, "
     "outlook), each cited to a filing chunk, framed as context — use language like 'the filing "
     "discloses' or 'a risk factor investors may weigh is', never 'this caused the decline'.\n"
-    "- If the filings contain nothing relevant to the move, say so plainly."
+    "- If neither the news nor the filings contain anything relevant to the move, say so plainly."
+)
+NEWS_GUIDANCE = (
+    "This question asks for recent news. Additional framing rules:\n"
+    "- News chunks are third-party reports, not verified facts. Attribute every headline to its "
+    "publisher and date, citing the [*-NEWS-*] chunk.\n"
+    "- If the news chunk says no headlines were available, say so plainly — never invent a "
+    "catalyst or event."
 )
 
 
 def build_context(chunks: list[dict]) -> str:
     blocks = []
     for c in chunks:
-        label = "as of" if c.get("kind") == "market" else "filed"
+        kind = c.get("kind")
+        label = "as of" if kind == "market" else "reported" if kind == "news" else "filed"
         hdr = f"[{c['chunk_id']}] {c['company']} — {c.get('section_title') or c.get('item') or ''} ({label} {c['filing_date']})"
         blocks.append(hdr + "\n" + c["text"])
     return "\n\n".join(blocks)

@@ -25,6 +25,14 @@
   category: explain_move
   note: "Paraphrase without an explicit period; defaults to 1mo."
 
+- question: "What's the latest news on Apple?"
+  category: news
+  note: "V4.2: plain news question (not explain-move) should route to a standalone news_headlines plan; answer must cite a -NEWS- chunk, attribute headlines to their publisher ('reported by'/'according to'), and never claim a headline caused a price move."
+
+- question: "What happened to NVIDIA recently?"
+  category: news
+  note: "Paraphrase without the word 'news' — should still trigger the news intent via the 'what happened to' pattern, not be mistaken for explain_move (no up/down/drop verb present)."
+
 - question: "Give me an insight brief on Apple"
   category: insight
   note: "Expected company_insight + filing_rag; citations should span filing (RAG), XBRL, market, and compute evidence."

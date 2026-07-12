@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from app import audit, config, corpus, ingest_jobs, insight, portfolio, research, screener, universe, watchlist
 from app.agent import session
 from app.agent.context import from_history
-from app.tools import market
+from app.tools import market, news as news_tool
 
 xbrl_lookup = research.xbrl_lookup
 prepare = research.prepare
@@ -163,6 +163,13 @@ def get_session(session_id: str, request: Request, x_api_key: str | None = Heade
 def quote(ticker: str, request: Request, x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
     return market.market_quote(ticker)
+
+
+@app.get("/api/news/{ticker}")
+def news(ticker: str, request: Request, x_api_key: str | None = Header(default=None)):
+    _guard(request, x_api_key)
+    result = news_tool.news_headlines(ticker)
+    return {"status": result["status"], "data": result.get("data", {})}
 
 
 @app.get("/api/companies")

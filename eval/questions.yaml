@@ -188,12 +188,22 @@
 # ── REFUSAL: OUT-OF-CORPUS ───────────────────────────────────────────────────
 
 - question: "What was Amazon's net income for its most recent fiscal year?"
+  category: refusal_needs_ingest
+  note: "Amazon is NOT in the corpus, but IS a real, resolvable SEC-filing company (V4.1 open
+         universe: app.universe.resolve_ticker matches 'Amazon' by name against the EDGAR
+         directory). Expected: mode=needs_ingest, refusal_reason=needs_ingest, an actionable
+         {action: offer_ingest, ticker: AMZN} payload — not a flat oos refusal. This question
+         used to test the Gate 1 threshold path (pre-V4.1, when 'Amazon' had no resolution tier
+         and fell through to unfiltered retrieval); superseded by the open-universe behavior."
+
+- question: "What was Zyntherix Corp's net income for its most recent fiscal year?"
   category: refusal_oos
-  note: "Amazon is NOT in the corpus. Expected: refused via Gate 1 threshold (top_sim < 0.50).
-         'Amazon' will be detected as a named entity by the router → mode=oos, unfiltered
-         retrieval. The best matching chunk should score well below the 0.50 threshold.
-         Record top_sim to extend the threshold calibration dataset (alongside Microsoft 0.454,
-         Tesla 0.487). Grade refusal-correct=yes if refused via threshold."
+  note: "Zyntherix Corp is not a real company — has no EDGAR ticker, so resolve_ticker()
+         returns None and the question still falls through to the Gate 1 threshold path
+         (mode=oos, unfiltered retrieval; measured top_sim=0.472, clearly below the 0.50
+         threshold). This is the open-universe-era replacement for the old Amazon fixture: a
+         named entity that is genuinely unresolvable, not just uningested, so the original
+         threshold-gate coverage isn't lost. Grade refusal-correct=yes if refused via threshold."
 
 # ── REFUSAL: IN-CORPUS BUT UNDISCLOSED ───────────────────────────────────────
 

@@ -37,7 +37,7 @@ def _company_insight(**kwargs: Any) -> dict[str, Any]:
 def _load_specs() -> dict[str, ToolSpec]:
     from app import config, universe
     from app.screener import DERIVED_METRICS
-    from app.tools import compute, filings, market, screen
+    from app.tools import compute, filings, market, news, screen
 
     tickers = universe.active_tickers  # callable: re-resolved at validation time, not import time
     xbrl_metrics = sorted({metric for _, metric in config.XBRL_KEYWORD_MAP})
@@ -77,6 +77,14 @@ def _load_specs() -> dict[str, ToolSpec]:
             "Fetch recent OHLCV price history for one ticker over a period.",
             market.market_history,
             arg_spec={"ticker": "*", "period": list(config.MARKET_HISTORY_PERIODS)},
+        ),
+        ToolSpec(
+            "news_headlines",
+            "Fetch recent third-party news headlines for one ticker — reported context, "
+            "never a verified cause of a price move. Unconstrained like market tools: "
+            "works for any ticker regardless of filing coverage.",
+            news.news_headlines,
+            arg_spec={"ticker": "*"},
         ),
         ToolSpec(
             "compute_metric",

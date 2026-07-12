@@ -56,6 +56,10 @@ def _deterministic_v3_actions(question: str, route: dict) -> tuple[str, list[dic
     explain_move = _matches(config.EXPLAIN_MOVE_INTENT_RE, question)
     insight = not explain_move and _matches(config.INSIGHT_INTENT_RE, question)
     valuation = not explain_move and not insight and _matches(config.VALUATION_INTENT_RE, question)
+    news = (
+        not explain_move and not insight and not valuation
+        and _matches(config.NEWS_INTENT_RE, question)
+    )
 
     tickers = _mentioned_tickers(question, route)
     ticker = tickers[0] if tickers else None
@@ -68,10 +72,16 @@ def _deterministic_v3_actions(question: str, route: dict) -> tuple[str, list[dic
             {"tool": "market_history", "args": {"ticker": ticker, "period": _history_period(question)}},
             {"tool": "market_quote", "args": {"ticker": ticker}},
             {"tool": "compute_metric", "args": {"metric": "price_change"}},
+            {"tool": "news_headlines", "args": {"ticker": ticker}},
             {"tool": "filing_rag", "args": {
                 "question": f"{company} risk factors demand competition segments outlook"}},
         ]
         return "explain_move", actions
+
+    if news:
+        if not ticker:
+            return None
+        return "news", [{"tool": "news_headlines", "args": {"ticker": ticker}}]
 
     if insight:
         if not ticker:

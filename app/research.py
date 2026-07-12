@@ -316,7 +316,7 @@ def _citation_payload(cited: Iterable[str], context_chunks: list[dict]) -> list[
     } for cid in cited if cid in ctx]
 
 
-_MARKET_EVIDENCE_INTENTS = {"valuation", "explain_move", "insight", "hybrid", "market_only"}
+_MARKET_EVIDENCE_INTENTS = {"valuation", "explain_move", "insight", "news", "hybrid", "market_only"}
 
 
 def _guidance_for(research_plan: dict) -> str | None:
@@ -326,6 +326,8 @@ def _guidance_for(research_plan: dict) -> str | None:
         return synthesize.VALUATION_GUIDANCE
     if intent == "explain_move":
         return synthesize.EXPLAIN_MOVE_GUIDANCE
+    if intent == "news":
+        return synthesize.NEWS_GUIDANCE
     return None
 
 
