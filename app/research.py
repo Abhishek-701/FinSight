@@ -328,6 +328,8 @@ def _guidance_for(research_plan: dict) -> str | None:
         return synthesize.EXPLAIN_MOVE_GUIDANCE
     if intent == "news":
         return synthesize.NEWS_GUIDANCE
+    if intent == "portfolio":
+        return synthesize.PORTFOLIO_GUIDANCE
     return None
 
 
@@ -352,8 +354,10 @@ def _merge_evidence(meta: dict, evidence: list[dict]) -> dict:
     return meta
 
 
-def _prepare_with_tools(question: str, route: dict, research_plan: dict) -> tuple[dict, list[dict]]:
-    context = {"question": question, "route": route}
+def _prepare_with_tools(
+    question: str, route: dict, research_plan: dict, client_id: str | None = None
+) -> tuple[dict, list[dict]]:
+    context = {"question": question, "route": route, "client_id": client_id}
     tool_calls, evidence = executor.execute(research_plan["actions"], context)
     meta = context.get("meta")
     # filing_rag's threshold-refused meta becomes context["meta"] and would normally short-circuit
@@ -475,7 +479,10 @@ def finalize(question: str, meta: dict, guidance: str | None = None) -> dict:
     }
 
 
-def run(question: str, conversation_context: ConversationContext | None = None) -> dict:
+def run(
+    question: str, conversation_context: ConversationContext | None = None,
+    client_id: str | None = None,
+) -> dict:
     """Full non-streaming research run with plan, tool trace, and answer."""
     started = time.perf_counter()
     working_question, context_meta = contextualize_question(question, conversation_context)
@@ -488,7 +495,7 @@ def run(question: str, conversation_context: ConversationContext | None = None) 
                 "conversation_context": context_meta}
 
     research_plan = plan(working_question, route)
-    meta, tool_calls = _prepare_with_tools(working_question, route, research_plan)
+    meta, tool_calls = _prepare_with_tools(working_question, route, research_plan, client_id)
 
     if meta.get("refused"):
         reflection = reflect(meta, meta["answer"])
@@ -512,16 +519,19 @@ def run(question: str, conversation_context: ConversationContext | None = None) 
             "elapsed_ms": _elapsed(started)}
 
 
-def answer(question: str) -> dict:
+def answer(question: str, client_id: str | None = None) -> dict:
     """Compatibility wrapper for CLI/eval callers."""
-    return run(question)
+    return run(question, client_id=client_id)
 
 
 def sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def stream_events(question: str, conversation_context: ConversationContext | None = None):
+def stream_events(
+    question: str, conversation_context: ConversationContext | None = None,
+    client_id: str | None = None,
+):
     """SSE generator: stream answer tokens, then a done event with metadata."""
     started = time.perf_counter()
     working_question, context_meta = contextualize_question(question, conversation_context)
@@ -597,7 +607,7 @@ def stream_events(question: str, conversation_context: ConversationContext | Non
         return
 
     research_plan = plan(working_question, route)
-    meta, tool_calls = _prepare_with_tools(working_question, route, research_plan)
+    meta, tool_calls = _prepare_with_tools(working_question, route, research_plan, client_id)
 
     if meta.get("refused"):
         reflection = reflect(meta, meta["answer"])

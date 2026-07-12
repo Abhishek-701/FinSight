@@ -205,6 +205,15 @@
          named entity that is genuinely unresolvable, not just uningested, so the original
          threshold-gate coverage isn't lost. Grade refusal-correct=yes if refused via threshold."
 
+# ── REFUSAL: NO PORTFOLIO (V4.3) ─────────────────────────────────────────────
+
+- question: "How is my portfolio doing?"
+  category: refusal_no_portfolio
+  note: "V4.3: portfolio intent (app.config.PORTFOLIO_INTENT_RE) is checked before router.py's
+         clarify short-circuit, since this question names no company. run_eval.py never supplies
+         a client_id, so this always hits the missing_client_id refusal — a regression guard for
+         the router match itself; live/browser-verified separately with real seeded holdings."
+
 # ── REFUSAL: IN-CORPUS BUT UNDISCLOSED ───────────────────────────────────────
 
 - question: "What is Apple's employee engagement or satisfaction score?"

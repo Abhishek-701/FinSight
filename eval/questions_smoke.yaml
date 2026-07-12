@@ -68,6 +68,12 @@
   category: insight
   note: "Smoke: company_insight + filing_rag bundle."
 
+- question: "How is my portfolio doing?"
+  category: refusal_no_portfolio
+  note: "Smoke: V4.3 portfolio intent routes to portfolio_context before the router's clarify
+         short-circuit; run_eval.py never supplies a client_id, so this exercises the
+         missing_client_id refusal path — a cheap regression guard for the router match."
+
 - question: "What is NVIDIA's current stock price and latest reported revenue?"
   category: hybrid
   note: "Smoke: plain hybrid regression guard, unaffected by V3/V4 intent branches."

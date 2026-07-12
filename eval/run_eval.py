@@ -88,7 +88,7 @@ def _add_check(checks: list[dict], name: str, passed: bool, detail: str) -> None
 
 def _expected_refusal(item: dict) -> bool | None:
     category = item.get("category", "")
-    if category in {"router_clarify", "refusal_oos", "refusal_needs_ingest"}:
+    if category in {"router_clarify", "refusal_oos", "refusal_needs_ingest", "refusal_no_portfolio"}:
         return True
     if category == "router_edge":
         return None
@@ -144,6 +144,17 @@ def _score(item: dict, res: dict) -> dict:
             "needs_ingest_action",
             res.get("action") == "offer_ingest" and bool(res.get("ticker")),
             f"action={res.get('action', '')} ticker={res.get('ticker', '')}",
+        )
+
+    if category == "refusal_no_portfolio":
+        # V4.3: run_eval.py never supplies a client_id (no fixture-seeding harness for
+        # portfolios), so a portfolio question here always hits the "no client_id" refusal —
+        # a cheap regression guard for the router intent match without needing live holdings.
+        _add_check(
+            checks,
+            "portfolio_refusal_reason",
+            res.get("refusal_reason") in ("missing_client_id", "empty_portfolio"),
+            f"reason={res.get('refusal_reason', '')}",
         )
 
     if category == "refusal_undisclosed":

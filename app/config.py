@@ -80,6 +80,15 @@ LLM_ROUTER_TRIGGER_RE = "|".join(
     (VALUATION_INTENT_RE, EXPLAIN_MOVE_INTENT_RE, INSIGHT_INTENT_RE, NEWS_INTENT_RE)
 )
 
+# V4.3: fully deterministic (no LLM router involvement — there's nothing ambiguous to plan,
+# the tool call is always just portfolio_context -> synthesize_report), checked in route_tools()
+# BEFORE the clarify/oos/needs_ingest branches since a portfolio question never names a company.
+PORTFOLIO_INTENT_RE = (
+    r"\b(my\s+(portfolio|holdings|positions|stocks|investments)|"
+    r"how\s+(am\s+i|is\s+my\s+portfolio)\s+doing|explain\s+my\s+portfolio|"
+    r"my\s+p&?l|my\s+(gains?|losses?)|how\s+concentrated\s+am\s+i)\b"
+)
+
 INSIGHT_HISTORY_PERIOD = "3mo"     # trend window for the insight brief
 VALUATION_FACT_METRICS = ["revenue", "net_income", "eps_diluted"]  # facts_lookup inputs for valuation plans
 

@@ -137,6 +137,12 @@ def route_tools(question: str, route: dict | None = None, metrics: list[str] | N
         "compute_intent": compute, "screen_intent": screen,
     }
 
+    if _matches(config.PORTFOLIO_INTENT_RE, question):
+        # Checked before clarify/oos: a portfolio question never names a company, so route()
+        # would otherwise classify it as clarify/oos and this branch would never be reached.
+        return {**base, "strategy": "deterministic", "intent": "portfolio",
+                "actions": [{"tool": "portfolio_context"}, {"tool": "synthesize_report"}]}
+
     if route["mode"] == "clarify" and not market:
         return {**base, "strategy": "deterministic",
                 "actions": [{"tool": "refuse_or_clarify", "reason": "missing_company"}]}

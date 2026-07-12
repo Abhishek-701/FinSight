@@ -153,23 +153,44 @@ export interface HistoryResult {
 
 export type HistoryPeriod = '1mo' | '3mo' | '6mo' | '1y'
 
-export interface PortfolioHolding {
+// Plain editable item — GET/POST/DELETE /api/portfolio (no live pricing).
+export interface PortfolioItem {
   ticker: string
   company: string
   shares: number
+  cost_basis: number | null
   updated_at: string
+}
+
+// Priced + P&L holding — GET /api/portfolio/analysis. All *_pct/weight fields are 0-1
+// fractions (use lib/format's pct() to render), matching PortfolioConcentration below.
+export interface PricedPortfolioHolding extends PortfolioItem {
   price: number | null
   value: number | null
   weight: number | null
-  change_percent: number | null
+  day_change_pct: number | null
+  day_change_value: number | null
+  unrealized_pl: number | null
+  unrealized_pl_pct: number | null
   market_status: 'ok' | 'unavailable'
 }
 
-export interface PortfolioResponse {
+export interface PortfolioConcentration {
+  top_ticker: string
+  top_weight: number
+  top3_weight: number
+  hhi: number
+  band: 'diversified' | 'moderately concentrated' | 'concentrated'
+}
+
+export interface PortfolioAnalysis {
   client_id: string
   as_of: string
+  holdings: PricedPortfolioHolding[]
   total_value: number
-  holdings: PortfolioHolding[]
+  total_day_change: number | null
+  total_unrealized_pl: number | null
+  concentration: PortfolioConcentration | null
   disclaimer: string
 }
 

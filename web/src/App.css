@@ -191,6 +191,12 @@ input:focus { border-color: #b9dec4; box-shadow: 0 0 0 4px rgba(12, 166, 120, 0.
 .preview-note { font-size: 12px; }
 .allocation-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; margin-bottom: 16px; background: var(--line); }
 .allocation-segment { transition: width 0.3s; }
+.portfolio-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.concentration-card { margin-top: 16px; }
+.concentration-band { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 999px; padding: 1px 7px; width: fit-content; font-weight: 800; }
+.band-diversified { color: var(--green-dark); background: #e8f6ed; }
+.band-moderately-concentrated { color: #8a6d1f; background: #fbf1d6; }
+.band-concentrated { color: var(--red); background: #fbe3e0; }
 
 /* Insight Brief */
 .insight-view { max-width: 900px; margin: 0 auto; width: 100%; }

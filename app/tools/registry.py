@@ -37,7 +37,7 @@ def _company_insight(**kwargs: Any) -> dict[str, Any]:
 def _load_specs() -> dict[str, ToolSpec]:
     from app import config, universe
     from app.screener import DERIVED_METRICS
-    from app.tools import compute, filings, market, news, screen
+    from app.tools import compute, filings, market, news, portfolio_ctx, screen
 
     tickers = universe.active_tickers  # callable: re-resolved at validation time, not import time
     xbrl_metrics = sorted({metric for _, metric in config.XBRL_KEYWORD_MAP})
@@ -106,6 +106,15 @@ def _load_specs() -> dict[str, ToolSpec]:
             "ratios, screener ranks, and filing evidence for one ticker.",
             _company_insight,
             arg_spec={"ticker": tickers},
+        ),
+        ToolSpec(
+            "portfolio_context",
+            "Assemble the requesting user's own portfolio: holdings, live valuation, P&L, "
+            "concentration, and news for the biggest movers. Takes no arguments — the plan "
+            "only decides WHETHER to call it; WHOSE portfolio it reads is injected by the "
+            "executor from the authenticated request, never chosen by a plan.",
+            portfolio_ctx.portfolio_context,
+            arg_spec={},
         ),
     ]
     return {spec.name: spec for spec in specs}

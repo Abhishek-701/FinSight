@@ -9,7 +9,6 @@ import logging
 import time
 import uuid
 from collections import defaultdict, deque
-from datetime import UTC, datetime
 
 from fastapi import Header, HTTPException, Request
 from fastapi import FastAPI
@@ -42,6 +41,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
     stream: bool = False
+    client_id: str | None = None
 
 
 class WatchlistRequest(BaseModel):
@@ -53,6 +53,7 @@ class PortfolioRequest(BaseModel):
     client_id: str
     ticker: str
     shares: float
+    cost_basis: float | None = None
 
 
 def _guard(request: Request, x_api_key: str | None = Header(default=None)) -> None:
@@ -136,10 +137,10 @@ def chat(req: ChatRequest, request: Request, x_api_key: str | None = Header(defa
     if req.stream:
         def events():
             yield research.sse("session", {"session_id": sid})
-            yield from research.stream_events(req.message, conversation_context)
+            yield from research.stream_events(req.message, conversation_context, req.client_id)
         return StreamingResponse(events(), media_type="text/event-stream")
 
-    result = research.run(req.message, conversation_context)
+    result = research.run(req.message, conversation_context, req.client_id)
     result["session_id"] = sid
     session.append(sid, "assistant", result["answer"], {"tool_calls": result.get("tool_calls", [])})
     audit.record({
@@ -222,48 +223,10 @@ def screener_snapshot(request: Request, x_api_key: str | None = Header(default=N
     return screener.snapshot(include_market=bool(live))
 
 
-def _portfolio_view(client_id: str) -> dict:
-    holdings = []
-    priced_value = 0.0
-    for holding in portfolio.items(client_id):
-        quote = market.market_quote(holding["ticker"])
-        if quote["status"] == "ok":
-            price = quote["data"]["price"]
-            change_percent = quote["data"]["change_percent"]
-            value = price * holding["shares"] if price is not None else None
-            market_status = "ok"
-        else:
-            price = value = change_percent = None
-            market_status = "unavailable"
-        if value is not None:
-            priced_value += value
-        holdings.append({
-            "ticker": holding["ticker"],
-            "company": holding["company"],
-            "shares": holding["shares"],
-            "updated_at": holding["updated_at"],
-            "price": price,
-            "value": value,
-            "weight": None,
-            "change_percent": change_percent,
-            "market_status": market_status,
-        })
-    for holding in holdings:
-        if holding["value"] is not None and priced_value:
-            holding["weight"] = holding["value"] / priced_value
-    return {
-        "client_id": client_id,
-        "as_of": datetime.now(UTC).replace(microsecond=0).isoformat(),
-        "total_value": priced_value,
-        "holdings": holdings,
-        "disclaimer": config.MARKET_DISCLAIMER,
-    }
-
-
 @app.get("/api/portfolio")
 def get_portfolio(client_id: str, request: Request, x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
-    return _portfolio_view(client_id)
+    return {"client_id": client_id, "items": portfolio.items(client_id)}
 
 
 @app.post("/api/portfolio")
@@ -271,18 +234,26 @@ def set_portfolio_holding(req: PortfolioRequest, request: Request,
                           x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
     try:
-        portfolio.set_holding(req.client_id, req.ticker, req.shares)
+        items = portfolio.set_holding(req.client_id, req.ticker, req.shares, req.cost_basis)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return _portfolio_view(req.client_id)
+    return {"client_id": req.client_id, "items": items}
 
 
 @app.delete("/api/portfolio/{ticker}")
 def remove_portfolio_holding(ticker: str, client_id: str, request: Request,
                              x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
-    portfolio.remove(client_id, ticker)
-    return _portfolio_view(client_id)
+    items = portfolio.remove(client_id, ticker)
+    return {"client_id": client_id, "items": items}
+
+
+@app.get("/api/portfolio/analysis")
+def portfolio_analysis(client_id: str, request: Request, x_api_key: str | None = Header(default=None)):
+    """Live valuation, P&L (where a cost basis was entered), and concentration — the computed
+    view; GET /api/portfolio above stays the plain editable holdings list."""
+    _guard(request, x_api_key)
+    return portfolio.analyze(client_id)
 
 
 @app.get("/api/insight/{ticker}")

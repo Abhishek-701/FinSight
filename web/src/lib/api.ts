@@ -4,7 +4,8 @@ import type {
   HistoryResult,
   InsightBrief,
   IngestJob,
-  PortfolioResponse,
+  PortfolioAnalysis,
+  PortfolioItem,
   QuoteResult,
   ScreenerResponse,
   SessionMessage,
@@ -22,11 +23,11 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
-export function chat(message: string, sessionId: string | null): Promise<ChatResponse> {
+export function chat(message: string, sessionId: string | null, clientId?: string | null): Promise<ChatResponse> {
   return jsonFetch<ChatResponse>('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId, stream: false }),
+    body: JSON.stringify({ message, session_id: sessionId, stream: false, client_id: clientId }),
   })
 }
 
@@ -58,11 +59,13 @@ async function* parseSse(res: Response): AsyncGenerator<SseEvent> {
   }
 }
 
-export async function* streamChat(message: string, sessionId: string | null): AsyncGenerator<SseEvent> {
+export async function* streamChat(
+  message: string, sessionId: string | null, clientId?: string | null
+): AsyncGenerator<SseEvent> {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, session_id: sessionId, stream: true }),
+    body: JSON.stringify({ message, session_id: sessionId, stream: true, client_id: clientId }),
   })
   yield* parseSse(res)
 }
@@ -137,19 +140,25 @@ export function getScreener(): Promise<ScreenerResponse> {
   return jsonFetch('/api/screener?live=1')
 }
 
-export function getPortfolio(clientId: string): Promise<PortfolioResponse> {
+export function getPortfolio(clientId: string): Promise<{ client_id: string; items: PortfolioItem[] }> {
   return jsonFetch(`/api/portfolio?client_id=${encodeURIComponent(clientId)}`)
 }
 
-export function setHolding(clientId: string, ticker: string, shares: number): Promise<PortfolioResponse> {
+export function getPortfolioAnalysis(clientId: string): Promise<PortfolioAnalysis> {
+  return jsonFetch(`/api/portfolio/analysis?client_id=${encodeURIComponent(clientId)}`)
+}
+
+export function setHolding(
+  clientId: string, ticker: string, shares: number, costBasis?: number | null
+): Promise<{ client_id: string; items: PortfolioItem[] }> {
   return jsonFetch('/api/portfolio', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ client_id: clientId, ticker, shares }),
+    body: JSON.stringify({ client_id: clientId, ticker, shares, cost_basis: costBasis ?? null }),
   })
 }
 
-export function removeHolding(clientId: string, ticker: string): Promise<PortfolioResponse> {
+export function removeHolding(clientId: string, ticker: string): Promise<{ client_id: string; items: PortfolioItem[] }> {
   return jsonFetch(`/api/portfolio/${encodeURIComponent(ticker)}?client_id=${encodeURIComponent(clientId)}`, {
     method: 'DELETE',
   })

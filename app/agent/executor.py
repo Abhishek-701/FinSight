@@ -23,6 +23,12 @@ def execute(actions: list[dict[str, Any]], context: dict[str, Any]) -> tuple[lis
         args.setdefault("route", context.get("route"))
         if tool == "compute_metric":
             args.setdefault("evidence", evidence)
+        if tool == "portfolio_context":
+            # Hard override, not setdefault: WHOSE portfolio this reads must come from the
+            # authenticated request context, never from a plan (LLM-produced or otherwise) —
+            # registry.py's arg_spec for this tool has no "client_id" key at all, so a plan
+            # can't smuggle one in anyway, but this is the actual security boundary.
+            args["client_id"] = context.get("client_id")
         result = run_tool(tool, **args)
         elapsed_ms = round((time.perf_counter() - started) * 1000)
         call = {k: v for k, v in result.items() if k not in {"meta", "evidence"}}

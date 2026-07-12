@@ -1,21 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getPortfolio, removeHolding, setHolding } from '../lib/api'
+import { getPortfolioAnalysis, removeHolding, setHolding } from '../lib/api'
 import { getClientId } from '../lib/clientId'
-import type { PortfolioHolding } from '../lib/types'
+import type { PortfolioAnalysis } from '../lib/types'
 
 const POLL_MS = 60_000
 
+const EMPTY: PortfolioAnalysis = {
+  client_id: '', as_of: '', holdings: [], total_value: 0,
+  total_day_change: null, total_unrealized_pl: null, concentration: null, disclaimer: '',
+}
+
 export function usePortfolio() {
-  const [holdings, setHoldings] = useState<PortfolioHolding[]>([])
-  const [totalValue, setTotalValue] = useState(0)
+  const [analysis, setAnalysis] = useState<PortfolioAnalysis>(EMPTY)
   const [loading, setLoading] = useState(true)
   const clientId = getClientId()
 
   const refresh = useCallback(async () => {
     try {
-      const res = await getPortfolio(clientId)
-      setHoldings(res.holdings)
-      setTotalValue(res.total_value)
+      const res = await getPortfolioAnalysis(clientId)
+      setAnalysis(res)
     } catch {
       /* keep last-known holdings on transient failure */
     } finally {
@@ -38,22 +41,30 @@ export function usePortfolio() {
   }, [refresh])
 
   const set = useCallback(
-    async (ticker: string, shares: number) => {
-      const res = await setHolding(clientId, ticker, shares)
-      setHoldings(res.holdings)
-      setTotalValue(res.total_value)
+    async (ticker: string, shares: number, costBasis?: number | null) => {
+      await setHolding(clientId, ticker, shares, costBasis)
+      await refresh()
     },
-    [clientId]
+    [clientId, refresh]
   )
 
   const remove = useCallback(
     async (ticker: string) => {
-      const res = await removeHolding(clientId, ticker)
-      setHoldings(res.holdings)
-      setTotalValue(res.total_value)
+      await removeHolding(clientId, ticker)
+      await refresh()
     },
-    [clientId]
+    [clientId, refresh]
   )
 
-  return { holdings, totalValue, loading, set, remove, refresh }
+  return {
+    holdings: analysis.holdings,
+    totalValue: analysis.total_value,
+    totalDayChange: analysis.total_day_change,
+    totalUnrealizedPl: analysis.total_unrealized_pl,
+    concentration: analysis.concentration,
+    loading,
+    set,
+    remove,
+    refresh,
+  }
 }

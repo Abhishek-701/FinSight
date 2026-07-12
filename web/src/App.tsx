@@ -52,6 +52,11 @@ function App() {
     setView('insight')
   }
 
+  function handleExplainPortfolio() {
+    setView('chat')
+    ask('Explain my portfolio today')
+  }
+
   const titles: Record<View, string> = {
     chat: 'Filings RAG + XBRL facts + market data',
     screener: 'Rank the six companies by financial and valuation metrics',
@@ -89,7 +94,7 @@ function App() {
           {view === 'chat' && <ChatView turns={turns} onAsk={ask} />}
           {view === 'screener' && <ScreenerView onCompare={handleCompare} onInsight={handleInsight} />}
           {view === 'compare' && <CompareView tickers={compareTickers} />}
-          {view === 'portfolio' && <PortfolioView companies={companies} />}
+          {view === 'portfolio' && <PortfolioView onExplain={handleExplainPortfolio} />}
           {view === 'insight' && <InsightView companies={companies} initialTicker={insightTicker} />}
         </section>
         {view === 'chat' && <Composer isBusy={isBusy} onAsk={ask} onClear={newChat} />}

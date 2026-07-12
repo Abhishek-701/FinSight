@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getSession, streamChat } from '../lib/api'
+import { getClientId } from '../lib/clientId'
 import { titleFromQuestion } from '../lib/format'
 import type { CitationDetail, PlanSummary, ToolCallSummary } from '../lib/types'
 
@@ -95,7 +96,7 @@ export function useChat() {
 
       let sid = sessionId
       try {
-        for await (const evt of streamChat(question, sid)) {
+        for await (const evt of streamChat(question, sid, getClientId())) {
           if (evt.event === 'session') {
             sid = evt.data.session_id as string
             setSessionId(sid)

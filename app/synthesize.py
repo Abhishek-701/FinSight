@@ -33,11 +33,14 @@ def _system_prompt() -> str:
         "(chunk ids like [NVDA-NEWS-...]) may be present for OTHER tickers too — both are fetched "
         "live regardless of filing coverage. Seeing a market or news chunk for a company is normal "
         "and answerable; it does NOT mean that company is covered for filing questions.\n"
+        "- PORTFOLIO evidence (chunk id like [PORT-...]) is the requesting user's own saved "
+        "holdings — never another company's data. Only present when the user asked about their "
+        "own portfolio.\n"
         "\n"
         "Content rules:\n"
         "- Use ONLY the provided context. Never use outside knowledge or guess a number.\n"
         "- Cite every figure inline with its chunk id in square brackets, e.g. [NVDA-0062], "
-        "[NVDA-MKT-...], or [NVDA-NEWS-...].\n"
+        "[NVDA-MKT-...], [NVDA-NEWS-...], or [PORT-...].\n"
         "- Treat SEC filings as historical/as-reported; market data as live or delayed as-of the quoted "
         "timestamp; news headlines as third-party reports, attributed to their publisher, never as "
         "verified fact.\n"
@@ -100,6 +103,20 @@ NEWS_GUIDANCE = (
     "- If the news chunk says no headlines were available, say so plainly — never invent a "
     "catalyst or event."
 )
+PORTFOLIO_GUIDANCE = (
+    "This question asks about the user's own portfolio. Additional framing rules:\n"
+    "- The [PORT-*] chunk is the user's own saved holdings, not a company filing or a market "
+    "quote for someone else — cite it for every number you state about their portfolio.\n"
+    "- Describe what IS: current value, weights, day change, P&L (only when the chunk states a "
+    "cost basis was provided — never assume one), concentration. Never say what the user should "
+    "DO — no 'you should buy/sell/trim/rebalance/diversify/reduce', no 'consider selling', no "
+    "recommendation of any kind. State the concentration measurement as a fact ('your top "
+    "holding is 62% of the portfolio') and stop there; do not follow it with advice.\n"
+    "- If a holding's unrealized P&L is 'not available (no cost basis entered)', say exactly "
+    "that — never estimate or infer a cost basis.\n"
+    "- If a [*-NEWS-*] chunk is present for one of the biggest movers, mention it as reported "
+    "context (attributed to its publisher), same non-causation rule as any other news chunk."
+)
 
 
 def _cached_system() -> list[dict]:
@@ -124,7 +141,9 @@ def build_context(chunks: list[dict]) -> str:
     blocks = []
     for c in chunks:
         kind = c.get("kind")
-        label = "as of" if kind == "market" else "reported" if kind == "news" else "filed"
+        label = (
+            "as of" if kind in ("market", "portfolio") else "reported" if kind == "news" else "filed"
+        )
         hdr = f"[{c['chunk_id']}] {c['company']} — {c.get('section_title') or c.get('item') or ''} ({label} {c['filing_date']})"
         blocks.append(hdr + "\n" + c["text"])
     return "\n\n".join(blocks)
