@@ -89,6 +89,28 @@ PORTFOLIO_INTENT_RE = (
     r"my\s+p&?l|my\s+(gains?|losses?)|how\s+concentrated\s+am\s+i)\b"
 )
 
+# V5.2: hypothetical trade simulation on the user's own portfolio (app.portfolio.whatif /
+# app.tools.portfolio_ctx.portfolio_whatif_tool). Deterministic like PORTFOLIO_INTENT_RE above —
+# checked BEFORE it in route_tools() since "what if I trimmed my top holding" also mentions
+# "top holding", not "holdings" plural, so it wouldn't collide with PORTFOLIO_INTENT_RE anyway,
+# but ordering it first keeps the two intents unambiguous as the vocab evolves.
+WHATIF_INTENT_RE = (
+    r"\bwhat\s+if\s+i\b.{0,40}\b(bought|buy|added?|sold|sell|trimmed|trim|doubled|double|halved|halve)\b"
+)
+
+# V5.2: "which of my holdings has X" questions need filing evidence for the specific held
+# companies, not just the portfolio snapshot — routed to portfolio_filings instead of plain
+# portfolio_context. Checked BEFORE PORTFOLIO_INTENT_RE in route_tools() since "my holdings"
+# alone would otherwise match the more generic portfolio branch first.
+PORTFOLIO_HOLDINGS_TOPIC_RE = (
+    r"\bwhich\s+of\s+my\s+holdings\b|"
+    r"\bmy\s+holdings?\b.{0,60}\b(risk|rate|rates|exposure|margin|competit\w+|regulat\w+|"
+    r"supply\s+chain|litigation)\b"
+)
+PORTFOLIO_FILINGS_MAX_TICKERS = 4   # bound the retrieval fan-out for holdings-aware Q&A
+BENCHMARK_MAX_HOLDINGS = 10         # cap priced holdings in the vs-SPY benchmark fan-out
+BENCHMARK_RE = r"\b(vs\.?\s+(the\s+)?market|s&p|spy|benchmark|beat(en)?\s+the\s+market)\b"
+
 INSIGHT_HISTORY_PERIOD = "3mo"     # trend window for the insight brief
 VALUATION_FACT_METRICS = ["revenue", "net_income", "eps_diluted"]  # facts_lookup inputs for valuation plans
 

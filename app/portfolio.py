@@ -15,6 +15,14 @@ from datetime import UTC, datetime
 from app import config, universe
 from app.tools import market
 
+_WHATIF_SHARES_RE = re.compile(
+    r"what\s+if\s+i\s+(bought|buy|added?|sold|sell|trimmed|trim)\s+(\d+(?:\.\d+)?)\s+(?:more\s+)?"
+    r"shares?\s+of\s+([A-Za-z]{1,6})\b", re.I,
+)
+_WHATIF_TOP_HOLDING_RE = re.compile(
+    r"what\s+if\s+i\s+(doubled|double|halved|halve|trimmed|trim).{0,30}\btop\s+holding\b", re.I,
+)
+
 _TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,10}$")
 
 
@@ -126,8 +134,14 @@ def analyze(client_id: str) -> dict:
     Degrades gracefully per-holding: a quote failure zeroes that holding's contribution to
     totals/weights (market_status="unavailable") rather than failing the whole analysis.
     """
-    holdings = items(client_id)
-    as_of = _now()
+    return _price_holdings(client_id, items(client_id), _now())
+
+
+def _price_holdings(client_id: str, holdings: list[dict], as_of: str) -> dict:
+    """Shared pricing/concentration math behind analyze() and whatif()'s before/after scenarios.
+    Takes an explicit holdings list (not read from the DB) so whatif() can price a hypothetical
+    set of holdings without touching storage.
+    """
     if not holdings:
         return {
             "client_id": client_id, "as_of": as_of, "holdings": [],
@@ -188,4 +202,112 @@ def analyze(client_id: str) -> dict:
         "total_value": total_value, "total_day_change": total_day_change,
         "total_unrealized_pl": total_unrealized_pl, "concentration": concentration,
         "disclaimer": config.MARKET_DISCLAIMER,
+    }
+
+
+def whatif(client_id: str, trades: list[dict]) -> dict:
+    """Simulate hypothetical share deltas on top of current holdings — never persisted.
+
+    trades: [{"ticker": str, "delta_shares": float}], positive to add, negative to trim/sell.
+    A ticker not currently held is only added to the "after" scenario when its delta is
+    positive; a holding whose shares net to ~0 or below is dropped from "after" (fully sold).
+    """
+    as_of = _now()
+    current = items(client_id)
+    by_ticker = {h["ticker"]: dict(h) for h in current}
+    for t in trades:
+        ticker = t["ticker"].upper()
+        if not _TICKER_RE.match(ticker):
+            raise ValueError("unsupported_ticker")
+        delta = t["delta_shares"]
+        if not math.isfinite(delta) or delta == 0 or abs(delta) > 1e9:
+            raise ValueError("invalid_delta_shares")
+        if ticker in by_ticker:
+            by_ticker[ticker]["shares"] += delta
+        elif delta > 0:
+            by_ticker[ticker] = {
+                "ticker": ticker, "company": universe.company_name(ticker),
+                "shares": delta, "cost_basis": None, "updated_at": as_of,
+            }
+    hypothetical = [h for h in by_ticker.values() if h["shares"] > 1e-9]
+    before = _price_holdings(client_id, current, as_of)
+    after = _price_holdings(client_id, hypothetical, as_of)
+    return {"client_id": client_id, "as_of": as_of, "trades": trades, "before": before, "after": after}
+
+
+def parse_whatif_trades(question: str, client_id: str) -> list[dict] | None:
+    """Deterministic NLU for the narrow what-if phrasings the chat UI supports. Returns None
+    when the question doesn't match a recognized pattern — the caller turns that into a
+    clarifying refusal rather than guessing at a trade.
+    """
+    m = _WHATIF_SHARES_RE.search(question)
+    if m:
+        verb, qty, ticker = m.group(1).lower(), float(m.group(2)), m.group(3).upper()
+        sign = -1 if verb in ("sold", "sell", "trimmed", "trim") else 1
+        return [{"ticker": ticker, "delta_shares": sign * qty}]
+
+    m = _WHATIF_TOP_HOLDING_RE.search(question)
+    if m:
+        analysis = analyze(client_id)
+        priced_holdings = [h for h in analysis["holdings"] if h["value"] is not None]
+        if not priced_holdings:
+            return None
+        top = max(priced_holdings, key=lambda h: h["value"])
+        verb = m.group(1).lower()
+        if verb in ("doubled", "double"):
+            return [{"ticker": top["ticker"], "delta_shares": top["shares"]}]
+        return [{"ticker": top["ticker"], "delta_shares": -top["shares"] / 2}]
+
+    return None
+
+
+def benchmark(client_id: str, period: str = "3mo") -> dict:
+    """Portfolio value history (today's shares held constant across the period — no
+    rebalancing, so this is NOT a historical-weights-accurate backtest) vs SPY over the
+    same period. Caps the fan-out to the top BENCHMARK_MAX_HOLDINGS holdings by current value.
+    """
+    holdings = items(client_id)
+    if not holdings:
+        return {"client_id": client_id, "period": period, "portfolio": None, "spy": None,
+                "holdings_used": [], "disclaimer": config.MARKET_DISCLAIMER}
+
+    priced = analyze(client_id)
+    top_by_value = sorted(
+        (h for h in priced["holdings"] if h["value"] is not None),
+        key=lambda h: h["value"], reverse=True,
+    )[: config.BENCHMARK_MAX_HOLDINGS]
+    shares_by_ticker = {h["ticker"]: h["shares"] for h in top_by_value}
+
+    histories: dict[str, list[dict]] = {}
+    for ticker in shares_by_ticker:
+        result = market.market_history(ticker, period)
+        if result["status"] == "ok" and result["data"]["rows"]:
+            histories[ticker] = result["data"]["rows"]
+
+    spy_result = market.market_history("SPY", period)
+    spy_rows = spy_result["data"]["rows"] if spy_result["status"] == "ok" else []
+
+    if not histories:
+        return {"client_id": client_id, "period": period, "portfolio": None,
+                "spy": spy_rows or None, "holdings_used": [], "disclaimer": config.MARKET_DISCLAIMER}
+
+    # Align on dates common to every included holding so the weighted sum never silently
+    # drops a holding's contribution for a date it happens to be missing.
+    common_dates: set[str] | None = None
+    for rows in histories.values():
+        dates = {r["date"] for r in rows}
+        common_dates = dates if common_dates is None else (common_dates & dates)
+    sorted_dates = sorted(common_dates or set())
+
+    by_date_close = {t: {r["date"]: r["close"] for r in rows} for t, rows in histories.items()}
+    portfolio_rows = []
+    for date in sorted_dates:
+        value = sum(shares_by_ticker[t] * by_date_close[t][date] for t in histories)
+        portfolio_rows.append({"date": date, "open": value, "high": value, "low": value,
+                                "close": value, "volume": 0})
+
+    return {
+        "client_id": client_id, "period": period,
+        "portfolio": portfolio_rows, "spy": spy_rows or None,
+        "holdings_used": sorted(histories), "disclaimer": config.MARKET_DISCLAIMER,
     }

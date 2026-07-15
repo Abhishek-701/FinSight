@@ -28,7 +28,17 @@ _TEMPLATES: dict[str, list[str]] = {
         "How concentrated is my portfolio?",
         "Which of my holdings is most exposed to risk?",
     ],
+    "portfolio_whatif": [
+        "How concentrated would my portfolio be after that?",
+        "What if I did the opposite trade instead?",
+    ],
+    "portfolio_filings": [
+        "How is my portfolio doing overall?",
+        "How concentrated is my portfolio?",
+    ],
 }
+
+_NO_TICKER_INTENTS = ("portfolio", "portfolio_whatif", "portfolio_filings")
 
 _GENERIC = [
     "What risk factors did {company} disclose?",
@@ -48,8 +58,8 @@ def suggest(
         ]
     if refused:
         return []
-    if intent == "portfolio":
-        return list(_TEMPLATES["portfolio"])
+    if intent in _NO_TICKER_INTENTS:
+        return list(_TEMPLATES[intent])
     if not ticker:
         return []
     company = universe.company_name(ticker)

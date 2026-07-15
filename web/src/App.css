@@ -197,6 +197,13 @@ input:focus { border-color: #b9dec4; box-shadow: 0 0 0 4px rgba(12, 166, 120, 0.
 .band-diversified { color: var(--green-dark); background: #e8f6ed; }
 .band-moderately-concentrated { color: #8a6d1f; background: #fbf1d6; }
 .band-concentrated { color: var(--red); background: #fbe3e0; }
+.benchmark-panel { margin-top: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; }
+.whatif-panel { margin-top: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; }
+.whatif-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.whatif-form select, .whatif-form input { border: 1px solid var(--line); background: #fffdf9; border-radius: 10px; padding: 9px 11px; }
+.whatif-holdings { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: 13px; }
+.whatif-holding-row { display: flex; justify-content: space-between; gap: 12px; }
+.whatif-holding-row span { color: var(--muted); }
 
 /* Insight Brief */
 .insight-view { max-width: 900px; margin: 0 auto; width: 100%; }

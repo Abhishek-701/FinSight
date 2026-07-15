@@ -137,6 +137,20 @@ def route_tools(question: str, route: dict | None = None, metrics: list[str] | N
         "compute_intent": compute, "screen_intent": screen,
     }
 
+    if _matches(config.WHATIF_INTENT_RE, question):
+        # Checked before the plain portfolio branch: the trade itself is parsed from the
+        # question text inside portfolio_whatif_tool at execution time, not here — this
+        # regex only decides WHETHER a what-if plan applies.
+        return {**base, "strategy": "deterministic", "intent": "portfolio_whatif",
+                "actions": [{"tool": "portfolio_whatif"}, {"tool": "synthesize_report"}]}
+
+    if _matches(config.PORTFOLIO_HOLDINGS_TOPIC_RE, question):
+        # Checked before PORTFOLIO_INTENT_RE: "which of my holdings has X" / "my holdings...
+        # risk/exposure" needs filing evidence for the held companies, not just the portfolio
+        # snapshot, and PORTFOLIO_INTENT_RE's "my holdings" would otherwise match first.
+        return {**base, "strategy": "deterministic", "intent": "portfolio_filings",
+                "actions": [{"tool": "portfolio_filings"}, {"tool": "synthesize_report"}]}
+
     if _matches(config.PORTFOLIO_INTENT_RE, question):
         # Checked before clarify/oos: a portfolio question never names a company, so route()
         # would otherwise classify it as clarify/oos and this branch would never be reached.

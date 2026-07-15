@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useQuotes } from '../hooks/useQuotes'
 import ConcentrationCard from './ConcentrationCard'
+import PortfolioWhatif from './PortfolioWhatif'
+import PortfolioBenchmark from './PortfolioBenchmark'
 import { money, num, pct } from '../lib/format'
 
 interface Props {
@@ -181,6 +183,9 @@ export default function PortfolioView({ onExplain }: Props) {
       </div>
 
       <ConcentrationCard concentration={concentration} />
+
+      <PortfolioBenchmark hasHoldings={holdings.length > 0} />
+      <PortfolioWhatif holdings={holdings} />
 
       <div className="footnote">Market data may be delayed. Not investment advice.</div>
     </div>

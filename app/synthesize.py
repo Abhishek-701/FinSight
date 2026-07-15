@@ -115,7 +115,31 @@ PORTFOLIO_GUIDANCE = (
     "- If a holding's unrealized P&L is 'not available (no cost basis entered)', say exactly "
     "that — never estimate or infer a cost basis.\n"
     "- If a [*-NEWS-*] chunk is present for one of the biggest movers, mention it as reported "
-    "context (attributed to its publisher), same non-causation rule as any other news chunk."
+    "context (attributed to its publisher), same non-causation rule as any other news chunk.\n"
+    "- If the chunk includes a vs-SPY comparison line, note plainly that it applies today's "
+    "holdings/weights backward over the period (not a historical-weights-accurate backtest), "
+    "citing the same [PORT-*] chunk."
+)
+WHATIF_GUIDANCE = (
+    "This question asks about a hypothetical trade on the user's own portfolio — a simulation, "
+    "not an executed trade. Additional framing rules:\n"
+    "- The [WIF-*] chunk is the simulation result. State plainly, up front, that this is "
+    "hypothetical and nothing was actually bought or sold.\n"
+    "- Report the before/after total value and concentration (HHI/band) from the chunk, citing "
+    "it for every number.\n"
+    "- Never recommend whether the user should actually make this trade — describe the "
+    "simulated outcome only; no 'you should' framing, no unsolicited advice about other trades."
+)
+PORTFOLIO_FILINGS_GUIDANCE = (
+    "This question asks how one of the user's own holdings relates to something disclosed in "
+    "that company's filing (e.g. risk exposure). Additional framing rules:\n"
+    "- The [PORT-*] chunk is the user's own saved holdings; any other chunk is that company's "
+    "own 10-K disclosure. Cite each separately — never blend a portfolio number with an "
+    "unrelated filing claim.\n"
+    "- Only speak to a held ticker's filing content if a filing chunk for that ticker is present "
+    "in context; if a held ticker has no filing chunk, say its filings weren't searched/covered "
+    "rather than guessing.\n"
+    "- Never give investment advice — describe what each filing discloses, not what to do about it."
 )
 
 

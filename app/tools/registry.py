@@ -116,6 +116,23 @@ def _load_specs() -> dict[str, ToolSpec]:
             portfolio_ctx.portfolio_context,
             arg_spec={},
         ),
+        ToolSpec(
+            "portfolio_whatif",
+            "Simulate a hypothetical trade (buy/sell/double/halve a holding) on the requesting "
+            "user's own portfolio and return before/after valuation and concentration. Takes no "
+            "arguments — same client_id-injection security boundary as portfolio_context; the "
+            "trade itself is parsed from the question text by the tool, not chosen by a plan.",
+            portfolio_ctx.portfolio_whatif_tool,
+            arg_spec={},
+        ),
+        ToolSpec(
+            "portfolio_filings",
+            "Join the requesting user's own holdings with filing retrieval scoped to the "
+            "tickers actually held. Takes no arguments — same client_id-injection security "
+            "boundary as portfolio_context.",
+            portfolio_ctx.portfolio_filings,
+            arg_spec={},
+        ),
     ]
     return {spec.name: spec for spec in specs}
 

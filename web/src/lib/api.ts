@@ -1,4 +1,5 @@
 import type {
+  BenchmarkResult,
   ChatResponse,
   HistoryPeriod,
   HistoryResult,
@@ -12,6 +13,8 @@ import type {
   UniverseResolveResult,
   UniverseSearchResult,
   WatchlistItem,
+  WhatifResult,
+  WhatifTrade,
 } from './types'
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -162,4 +165,16 @@ export function removeHolding(clientId: string, ticker: string): Promise<{ clien
   return jsonFetch(`/api/portfolio/${encodeURIComponent(ticker)}?client_id=${encodeURIComponent(clientId)}`, {
     method: 'DELETE',
   })
+}
+
+export function postWhatif(clientId: string, trades: WhatifTrade[]): Promise<WhatifResult> {
+  return jsonFetch('/api/portfolio/whatif', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId, trades }),
+  })
+}
+
+export function getBenchmark(clientId: string, period: HistoryPeriod): Promise<BenchmarkResult> {
+  return jsonFetch(`/api/portfolio/benchmark?client_id=${encodeURIComponent(clientId)}&period=${period}`)
 }

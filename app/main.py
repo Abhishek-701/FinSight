@@ -56,6 +56,16 @@ class PortfolioRequest(BaseModel):
     cost_basis: float | None = None
 
 
+class WhatifTrade(BaseModel):
+    ticker: str
+    delta_shares: float
+
+
+class WhatifRequest(BaseModel):
+    client_id: str
+    trades: list[WhatifTrade]
+
+
 def _guard(request: Request, x_api_key: str | None = Header(default=None)) -> None:
     if config.API_KEY and x_api_key != config.API_KEY:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
@@ -254,6 +264,29 @@ def portfolio_analysis(client_id: str, request: Request, x_api_key: str | None =
     view; GET /api/portfolio above stays the plain editable holdings list."""
     _guard(request, x_api_key)
     return portfolio.analyze(client_id)
+
+
+@app.post("/api/portfolio/whatif")
+def portfolio_whatif(req: WhatifRequest, request: Request, x_api_key: str | None = Header(default=None)):
+    """Simulate hypothetical share deltas on top of current holdings — never persisted."""
+    _guard(request, x_api_key)
+    trades = [{"ticker": t.ticker, "delta_shares": t.delta_shares} for t in req.trades]
+    try:
+        return portfolio.whatif(req.client_id, trades)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/portfolio/benchmark")
+def portfolio_benchmark(
+    client_id: str, request: Request, period: str = "3mo",
+    x_api_key: str | None = Header(default=None),
+):
+    """Portfolio value history (today's shares, static weights) vs SPY over the same period."""
+    _guard(request, x_api_key)
+    if period not in config.MARKET_HISTORY_PERIODS:
+        raise HTTPException(status_code=400, detail="invalid_period")
+    return portfolio.benchmark(client_id, period)
 
 
 @app.get("/api/insight/{ticker}")

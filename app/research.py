@@ -330,6 +330,10 @@ def _guidance_for(research_plan: dict) -> str | None:
         return synthesize.NEWS_GUIDANCE
     if intent == "portfolio":
         return synthesize.PORTFOLIO_GUIDANCE
+    if intent == "portfolio_whatif":
+        return synthesize.WHATIF_GUIDANCE
+    if intent == "portfolio_filings":
+        return synthesize.PORTFOLIO_FILINGS_GUIDANCE
     return None
 
 

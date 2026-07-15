@@ -9,6 +9,12 @@ from typing import Any
 from app import config
 from app.tools.registry import run_tool
 
+# Tools whose primary "whose data" argument (client_id) must come from the authenticated
+# request context, never from a plan (LLM-produced or otherwise). None of these tools has a
+# client_id key in registry.py's arg_spec, so a plan can't smuggle one in anyway — this is
+# the actual enforcement point.
+_CLIENT_ID_INJECTED_TOOLS = {"portfolio_context", "portfolio_whatif", "portfolio_filings"}
+
 
 def execute_events(
     actions: list[dict[str, Any]], context: dict[str, Any]
@@ -30,11 +36,8 @@ def execute_events(
         args.setdefault("route", context.get("route"))
         if tool == "compute_metric":
             args.setdefault("evidence", evidence)
-        if tool == "portfolio_context":
-            # Hard override, not setdefault: WHOSE portfolio this reads must come from the
-            # authenticated request context, never from a plan (LLM-produced or otherwise) —
-            # registry.py's arg_spec for this tool has no "client_id" key at all, so a plan
-            # can't smuggle one in anyway, but this is the actual security boundary.
+        if tool in _CLIENT_ID_INJECTED_TOOLS:
+            # Hard override, not setdefault: see _CLIENT_ID_INJECTED_TOOLS above.
             args["client_id"] = context.get("client_id")
         result = run_tool(tool, **args)
         elapsed_ms = round((time.perf_counter() - started) * 1000)

@@ -202,6 +202,28 @@ export interface PortfolioAnalysis {
   disclaimer: string
 }
 
+export interface WhatifTrade {
+  ticker: string
+  delta_shares: number
+}
+
+export interface WhatifResult {
+  client_id: string
+  as_of: string
+  trades: WhatifTrade[]
+  before: PortfolioAnalysis
+  after: PortfolioAnalysis
+}
+
+export interface BenchmarkResult {
+  client_id: string
+  period: HistoryPeriod
+  portfolio: HistoryRow[] | null
+  spy: HistoryRow[] | null
+  holdings_used: string[]
+  disclaimer: string
+}
+
 export interface ValuationMetric {
   metric: string
   value: number
