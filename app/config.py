@@ -27,7 +27,14 @@ MAX_CONTEXT_CHUNKS = 24   # token/cost cap per question (G12)
 # Threshold on the NORMALIZED DENSE similarity (cosine) of the top retrieved chunk.
 # Out-of-corpus questions (e.g. "Tesla's revenue") score low here. Provisionally calibrated from
 # the Phase-3 probe scores (DECISIONS.md): Tesla 0.487 (out) vs KO-attrition 0.518 (in) vs real
-# hits 0.61-0.70. 0.50 sits in the gap. Phase 6 refines with the user's eval probes.
+# hits 0.61-0.70. 0.50 sits in the gap.
+#
+# V5.4 re-check (eval/calibrate_threshold.py, run against the current corpus after seed filings
+# rolled to newer fiscal years): the gap has narrowed to Tesla 0.517 (out) vs KO-attrition 0.522
+# (in) — only a 0.005 margin from 10 probes, too thin to confidently move this value without a
+# much larger probe set covering narrow/segment-specific in-corpus questions (which likely score
+# lower than the broad-topic probes used so far). Left at 0.50, which still sits just below the
+# current out-of-corpus probe, pending a wider calibration pass.
 DENSE_SIM_THRESHOLD = 0.50
 
 # --- Reranker (Phase 5, toggleable) ---

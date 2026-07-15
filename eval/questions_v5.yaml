@@ -1,0 +1,22 @@
+# V5 eval suite: cross-company valuation comparison (V5.3) and the deterministic
+# suggestions-field regression guard (see run_eval.py's unconditional suggestions_field_present
+# check, which every category in every suite is scored against, not just this file).
+#
+# Portfolio/what-if/holdings-aware questions (V5.2) are NOT covered here: run_eval.py has no
+# fixture-seeding hook for a client_id's holdings (same gap noted in questions.yaml's
+# refusal_no_portfolio category), so those are covered by tests/test_portfolio_whatif.py,
+# tests/test_portfolio_benchmark.py, and tests/test_portfolio_agent.py instead.
+#
+# Run with: python eval/run_eval.py eval/questions_v5.yaml eval/results_v5.md eval/results_v5.json
+
+- question: "Is Apple or NVIDIA more expensive?"
+  category: valuation_comparison
+  note: "Expected: 1 facts_lookup (decompose mode, both tickers) + 2 market_quote + 4 compute_metric (pe_ratio/ps_ratio x2 tickers) + synthesize_report. Both companies must have their own -CALC- citations (not the same ticker's chunk cited twice), answer presented as a table, no 'better investment' conclusion."
+
+- question: "Compare Walmart and Coca-Cola's P/E ratios"
+  category: valuation_comparison
+  note: "Same comparison flow for a different pair; regression guard that the deterministic comparison branch isn't accidentally NVDA/AAPL-specific."
+
+- question: "What was Apple's revenue last year?"
+  category: filings_only
+  note: "Regression guard: plain single-company filing question is unaffected by the V5.3 comparison branch (route mode=single, not decompose, so comparison never fires)."

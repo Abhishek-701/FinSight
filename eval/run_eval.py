@@ -307,6 +307,40 @@ def _score(item: dict, res: dict) -> dict:
             "news answers must not claim a headline caused a price move",
         )
 
+    if category == "valuation_comparison":
+        # V5.3: cross-company valuation comparison — must cite BOTH companies' own -CALC-
+        # evidence (not just one, which would mean compute_metric resolved to the same
+        # ticker's chunk twice) and present the comparison as a table. Named distinctly from
+        # questions.yaml's pre-existing "comparison" category (screener superlatives like
+        # "which of the six companies had the highest operating income") — same category name
+        # would silently apply these compute_metric-specific checks to multi_company_compare
+        # answers and fail them for the wrong reason.
+        calc_tickers = {c.split("-")[0] for c in calc_citations}
+        _add_check(
+            checks,
+            "both_companies_have_calc_citations",
+            len(calc_tickers) >= 2,
+            f"calc_citation_tickers={sorted(calc_tickers)}",
+        )
+        _add_check(
+            checks,
+            "market_tool_called_per_company",
+            tool_names.count("market_quote") >= 2,
+            f"tools={tool_names}",
+        )
+        _add_check(
+            checks,
+            "table_present",
+            "|" in res.get("answer", ""),
+            "comparison answers should present a markdown table",
+        )
+        _add_check(
+            checks,
+            "not_advice_language",
+            "invest" in res.get("answer", "").lower() or "advice" in res.get("answer", "").lower(),
+            "comparison answers should not conclude one company is the better investment",
+        )
+
     if category == "insight":
         _add_check(
             checks,
@@ -331,6 +365,15 @@ def _score(item: dict, res: dict) -> dict:
         "agent_metadata",
         bool(res.get("plan")) and bool(res.get("tool_calls")),
         "plan and tool_calls should be present",
+    )
+    _add_check(
+        checks,
+        "suggestions_field_present",
+        "suggestions" in res,
+        # V5.1: every research.run()/stream_events() path attaches a (possibly empty)
+        # suggestions list — a missing key means a code path forgot to, not that there were
+        # no good suggestions for this question.
+        "the suggestions key should always be present, even if the list is empty",
     )
 
     if reflection and not refused:

@@ -484,7 +484,7 @@ def _run_summary(question: str, ticker: str, route: dict, started: float) -> dic
             **_refusal("threshold",
                        "I couldn't find enough information in the filings to summarize.",
                        meta),
-            "plan": {}, "tool_calls": tool_calls, "elapsed_ms": _elapsed(started),
+            "plan": {}, "tool_calls": tool_calls, "suggestions": [], "elapsed_ms": _elapsed(started),
         }
 
     answer = f"## {company}\n\n" + "\n\n".join(sections)
@@ -507,6 +507,7 @@ def _run_summary(question: str, ticker: str, route: dict, started: float) -> dic
         "reflection": reflection,
         "plan": {"strategy": "per_topic_summary", "topics": [t for _, t in _SUMMARY_TOPICS]},
         "tool_calls": tool_calls,
+        "suggestions": suggest.suggest(None, ticker, False, None),
         "elapsed_ms": _elapsed(started),
     }
 
@@ -654,6 +655,7 @@ def stream_events(
             "question": question,
             "contextualized_question": working_question,
             "conversation_context": context_meta,
+            "suggestions": suggest.suggest(None, ticker, False, None),
             "elapsed_ms": _elapsed(started),
         })
         return
