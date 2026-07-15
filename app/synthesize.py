@@ -130,6 +130,17 @@ WHATIF_GUIDANCE = (
     "- Never recommend whether the user should actually make this trade — describe the "
     "simulated outcome only; no 'you should' framing, no unsolicited advice about other trades."
 )
+COMPARISON_GUIDANCE = (
+    "This question compares two or more companies' valuation. Additional framing rules:\n"
+    "- Present the comparison as a markdown table, one row per metric (e.g. P/E, P/S), one "
+    "column per company, citing each cell's source chunk — never state a number without its "
+    "citation, and never blend one company's [*-CALC-*]/[*-XBRL-*] chunk with another's.\n"
+    "- If a metric is missing for one company, say so in that cell ('not available') rather "
+    "than omitting the company or guessing a value.\n"
+    "- State which company is higher/lower on each metric as a factual observation, and note "
+    "that different industries carry different typical valuation ranges — never conclude one "
+    "company is a better investment or recommend buying/selling either."
+)
 PORTFOLIO_FILINGS_GUIDANCE = (
     "This question asks how one of the user's own holdings relates to something disclosed in "
     "that company's filing (e.g. risk exposure). Additional framing rules:\n"

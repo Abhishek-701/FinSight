@@ -164,13 +164,23 @@ _METRIC_HANDLERS = {
 
 
 def compute_metric(metric: str, inputs: dict | None = None, evidence: list[dict] | None = None,
-                   **_: object) -> dict:
+                   ticker: str | None = None, **_: object) -> dict:
     """Compute small ratios from explicit inputs.
 
     The agent only calls this when structured inputs are already available. It
     does not parse model prose or filing text.
+
+    `ticker`, when given, scopes the evidence pool to that ticker's chunks before extraction —
+    without it, a comparison plan's evidence (facts + quotes for 2+ companies gathered by
+    earlier actions) would always resolve to whichever ticker's chunk happens to come first.
+    Falls back to the full pool if scoping would leave nothing to extract from.
     """
     handler = _METRIC_HANDLERS.get(metric)
     if handler is None:
         return {"status": "unsupported", "data": {"metric": metric}, "evidence": []}
-    return handler(metric, inputs or {}, evidence or [])
+    ev = evidence or []
+    if ticker:
+        scoped = [chunk for chunk in ev if chunk.get("ticker") == ticker]
+        if scoped:
+            ev = scoped
+    return handler(metric, inputs or {}, ev)

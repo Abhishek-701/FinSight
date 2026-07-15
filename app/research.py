@@ -334,6 +334,8 @@ def _guidance_for(research_plan: dict) -> str | None:
         return synthesize.WHATIF_GUIDANCE
     if intent == "portfolio_filings":
         return synthesize.PORTFOLIO_FILINGS_GUIDANCE
+    if intent == "comparison":
+        return synthesize.COMPARISON_GUIDANCE
     return None
 
 

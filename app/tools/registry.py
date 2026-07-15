@@ -89,9 +89,10 @@ def _load_specs() -> dict[str, ToolSpec]:
         ToolSpec(
             "compute_metric",
             "Compute a small deterministic ratio (pe_ratio, ps_ratio, price_change, "
-            "market_cap_to_revenue) from evidence already gathered this turn.",
+            "market_cap_to_revenue) from evidence already gathered this turn. Pass `ticker` "
+            "to scope a multi-company evidence pool (comparison plans) to one company.",
             compute.compute_metric,
-            arg_spec={"metric": compute_metrics, "inputs": "*"},
+            arg_spec={"metric": compute_metrics, "inputs": "*", "ticker": tickers},
         ),
         ToolSpec(
             "screen_companies",

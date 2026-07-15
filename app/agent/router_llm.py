@@ -131,11 +131,31 @@ def route_tools(question: str, route: dict | None = None, metrics: list[str] | N
     history = market and _matches(r"\b(history|chart|over the last|past|month|week|year)\b", question)
     screen_metric = _detect_screen_metric(question)
     screen = route["mode"] == "decompose" and screen_metric is not None and bool(router.SUPERLATIVE_RE.search(question))
+    # V5.3: "is AAPL or NVDA more expensive?" — 2+ companies explicitly named (decompose mode,
+    # not a screener superlative) plus valuation vocabulary. Unambiguous like segment/screen
+    # below, so it's resolved deterministically rather than risking the LLM router silently
+    # collapsing it to a single-ticker valuation plan (its schema's "ticker" field is singular).
+    comparison = (
+        route["mode"] == "decompose" and not segment and not screen and len(route["tickers"]) >= 2
+        and _matches(config.VALUATION_INTENT_RE, question)
+    )
 
     base = {
         "route": route, "metrics": metrics, "market_intent": market, "segment_intent": segment,
-        "compute_intent": compute, "screen_intent": screen,
+        "compute_intent": compute, "screen_intent": screen, "comparison_intent": comparison,
     }
+
+    if comparison:
+        tickers = route["tickers"][: config.COMPARISON_MAX_TICKERS]
+        actions: list[dict] = [{"tool": "facts_lookup", "args": {"metrics": config.VALUATION_FACT_METRICS}}]
+        for ticker in tickers:
+            actions.append({"tool": "market_quote", "args": {"ticker": ticker}})
+        for ticker in tickers:
+            actions.append({"tool": "compute_metric", "args": {"metric": "pe_ratio", "ticker": ticker}})
+            actions.append({"tool": "compute_metric", "args": {"metric": "ps_ratio", "ticker": ticker}})
+        actions = actions[: config.AGENT_MAX_STEPS - 1]
+        actions.append({"tool": "synthesize_report"})
+        return {**base, "strategy": "deterministic", "intent": "comparison", "actions": actions}
 
     if _matches(config.WHATIF_INTENT_RE, question):
         # Checked before the plain portfolio branch: the trade itself is parsed from the

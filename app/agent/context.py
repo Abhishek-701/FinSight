@@ -38,6 +38,24 @@ _TOPICAL_FOLLOWUP_RE = re.compile(
 _PLURAL_PRONOUN_RE = re.compile(r"\b(they|their|them|both)\b", re.I)
 _SINGULAR_PRONOUN_RE = re.compile(r"\b(it|its|that|this|same\s+company)\b", re.I)
 
+# A bare company swap ("What about AAPL?") names a new company but carries no intent words of
+# its own — without this, it would fall into the "explicit company named" branch below as-is,
+# losing whatever V3 intent (valuation/explain_move/...) the PRIOR question had, since intent
+# detection re-runs regexes against this question's text alone.
+_BARE_SWAP_RE = re.compile(r"^\s*(what|how)\s+about\b", re.I)
+
+
+def _swap_company(prior_question: str, old_ticker: str, new_ticker: str) -> str:
+    """Rewrite the prior question's company mention(s) to the new company, keeping its
+    intent-triggering wording intact (e.g. "Is NVDA expensive?" + AAPL -> "Is Apple expensive?").
+    """
+    new_company = universe.company_name(new_ticker)
+    old_company = universe.company_name(old_ticker)
+    result = prior_question
+    for old_name in sorted({old_company, old_ticker}, key=len, reverse=True):
+        result = re.sub(rf"\b{re.escape(old_name)}\b", new_company, result, flags=re.I)
+    return result
+
 
 def from_history(history: list[dict]) -> ConversationContext:
     tickers: list[str] = []
@@ -70,7 +88,10 @@ def contextualize_question(question: str, context: ConversationContext | None) -
     """Resolve follow-up questions by carrying forward the active company from history.
 
     Resolution priority (first match wins):
-    1. Question names a company explicitly → use as-stated; context is irrelevant.
+    1a. Question is a bare company swap ("What about AAPL?") naming a DIFFERENT company than
+        the active one → rewrite the PRIOR question with the new company substituted in, so
+        its intent wording (e.g. "expensive") carries over instead of being lost.
+    1b. Question otherwise names a company explicitly → use as-stated; context is irrelevant.
     2. Plural pronoun (they/their/them/both) + multiple context tickers → prepend all
        recent companies so a cross-company follow-up stays multi-company.
     3. Singular pronoun (it/its/that/this) OR any topical financial keyword with no
@@ -79,7 +100,13 @@ def contextualize_question(question: str, context: ConversationContext | None) -
     """
     if not context:
         return question, {}
-    if router.detect_companies(question):
+    named = router.detect_companies(question)
+    if named:
+        new_ticker = named[-1]
+        if (_BARE_SWAP_RE.match(question) and context.active_ticker
+                and context.last_user_question and new_ticker != context.active_ticker):
+            swapped = _swap_company(context.last_user_question, context.active_ticker, new_ticker)
+            return swapped, context.as_dict()
         return question, context.as_dict()
     if not context.tickers:
         return question, context.as_dict()

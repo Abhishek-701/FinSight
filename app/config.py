@@ -114,6 +114,12 @@ BENCHMARK_RE = r"\b(vs\.?\s+(the\s+)?market|s&p|spy|benchmark|beat(en)?\s+the\s+
 INSIGHT_HISTORY_PERIOD = "3mo"     # trend window for the insight brief
 VALUATION_FACT_METRICS = ["revenue", "net_income", "eps_diluted"]  # facts_lookup inputs for valuation plans
 
+# V5.3: cross-company valuation comparison ("is AAPL or NVDA more expensive?"). Caps the
+# market_quote/compute_metric fan-out so the plan (1 facts_lookup + N market_quote + 2N
+# compute_metric + synthesize_report) never exceeds AGENT_MAX_STEPS=12 and silently drops a
+# ticker's ratios — N=3 gives 11 actions total, N=4 would need 14 and get truncated.
+COMPARISON_MAX_TICKERS = 3
+
 # --- Screener (V2) ---
 # Ordered: first match wins. Checked BEFORE the more general COMPUTE_INTENT_RE-driven
 # compute_metric path so "operating margin" etc. route to the multi-company screen_companies

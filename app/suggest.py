@@ -24,6 +24,10 @@ _TEMPLATES: dict[str, list[str]] = {
     "news": [
         "Is {company} expensive right now?",
     ],
+    "comparison": [
+        "Why did {company} move this month?",
+        "How does {company} rank on operating margin?",
+    ],
     "portfolio": [
         "How concentrated is my portfolio?",
         "Which of my holdings is most exposed to risk?",
