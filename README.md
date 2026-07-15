@@ -85,6 +85,7 @@ Optional:
 - `FINSIGHT_USE_RERANKER` — set to `0` to skip the cross-encoder reranker (default `1` locally, `0` in the deploy image; see [Deploy](#deploy))
 - `FINSIGHT_USE_LLM_ROUTER` — set to `0` to force the deterministic-only tool router (default `1`)
 - `FINSIGHT_ROUTER_MODEL` — model for the hybrid tool router (default `claude-haiku-4-5`)
+- `DATABASE_URL` — a `postgresql://` URL switches sessions/portfolio/watchlist (`app/storage.py`) from the sqlite default to Postgres; unset (the default) keeps everything on sqlite exactly as before. The filing corpus (chunks/facts/Chroma) is unaffected either way. Verified live against a throwaway Postgres container (session ordering, watchlist dedupe, portfolio upsert + the `cost_basis` migration, and `whatif()`) via a one-off manual script, not the pytest suite — the existing tests isolate each test with a fresh sqlite file per test (`setUp`), which doesn't carry over to a shared Postgres instance without added per-test cleanup this phase didn't build. The sqlite path is what the automated suite (`tests/`) actually exercises.
 
 ### Setup
 
@@ -189,6 +190,8 @@ Deployed on [Render](https://render.com)'s free tier via `render.yaml`:
 
 The reranker is off in deploy (`FINSIGHT_USE_RERANKER=0`, baked into the Dockerfile) since `sentence-transformers`/`torch` would exceed the free tier's 512MB RAM. The vector store and chunk/fact stores for the six seed companies are committed to the repo so the image builds directly from git with no re-ingest or re-embedding step. The watchlist/portfolio/session SQLite database and any on-demand-added companies (`data/dynamic/`, gitignored) live on ephemeral disk and reset on redeploy; the frontend mirrors tickers and share counts in `localStorage` and re-syncs them on load, so a user's watchlist/portfolio *selections* survive a redeploy even though the server-side rows — and any added companies' filing data — do not. Re-adding a company after a redeploy is the same ~1-minute flow as adding it the first time.
 
+**Optional Postgres.** Setting `DATABASE_URL` (e.g. to Render's own free Postgres add-on — note its 90-day expiry on the free tier) moves sessions/portfolio/watchlist off the ephemeral disk so they survive a redeploy; the filing corpus still ships in the image either way. This isn't wired into `render.yaml` by default — it's opt-in, not required for the demo to work.
+
 ## Repo layout
 
 ```
@@ -196,10 +199,12 @@ ingest/     download  parse  chunk  embed  xbrl  validate  pipeline (on-demand p
 app/        main  research  config  audit  corpus  synthesize  retrieve  router  decompose  facts
             rerank  screener  watchlist  portfolio  insight  universe (open-universe registry
             + ticker/name resolution)  ingest_jobs (async ingest orchestration + LRU eviction)
+            suggest (deterministic follow-up chips)  storage (sqlite/Postgres backend selection)
 app/agent/  executor  router_llm  router_plan  context  session
-app/tools/  filings  market  compute  screen  registry
+app/tools/  filings  market  news  compute  screen  portfolio_ctx  registry
 web/        Vite + React + TS frontend (src/components, src/hooks, src/lib)
-eval/       questions.yaml  questions_market.yaml  questions_hybrid.yaml  questions_v3.yaml  run_eval.py
+eval/       questions.yaml  questions_market.yaml  questions_hybrid.yaml  questions_v3.yaml
+            questions_v5.yaml  questions_smoke.yaml  run_eval.py  calibrate_threshold.py
 static/     index.html (legacy fallback)  dist/ (built SPA, gitignored)
 tests/
 data/       raw/  parsed/  chunks.json  facts.json  chroma/  manifest.json  dynamic/ (on-demand
@@ -207,3 +212,8 @@ data/       raw/  parsed/  chunks.json  facts.json  chroma/  manifest.json  dyna
 ```
 
 All tunables are in `app/config.py`.
+
+## Future work
+
+- **Alerts/digest on portfolio moves or news** — deliberately out of scope: Render's free tier spins the service down after ~15 minutes idle, so there's no scheduler or push channel to fire an alert while nothing is running. A "digest" would only ever fire when someone's already looking at the app, which the existing portfolio/news chat answers already cover.
+- **Lot-level cost basis** — `app/portfolio.py` intentionally tracks one average `cost_basis` per ticker, overwritten on each update, not individual purchase lots. Real lot tracking is a meaningful schema change for numbers that barely move the demo; the current model is documented as an explicit non-goal at the top of that file.

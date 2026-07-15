@@ -1,5 +1,6 @@
-"""Small SQLite-backed portfolio store, keyed by anonymous client_id. Shares only — dollar
-amounts are converted to shares client-side at the live price before this module sees them.
+"""Portfolio store, keyed by anonymous client_id — sqlite by default, Postgres when
+DATABASE_URL is set (app.storage). Shares only — dollar amounts are converted to shares
+client-side at the live price before this module sees them.
 
 analyze() (V4.3) adds live valuation/P&L/concentration on top of the plain holdings list —
 average-cost basis, no lot tracking (a single cost_basis per ticker, overwritten on each
@@ -9,10 +10,9 @@ from __future__ import annotations
 
 import math
 import re
-import sqlite3
 from datetime import UTC, datetime
 
-from app import config, universe
+from app import config, storage, universe
 from app.tools import market
 
 _WHATIF_SHARES_RE = re.compile(
@@ -30,20 +30,23 @@ def _now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
-def _connect() -> sqlite3.Connection:
-    config.SESSION_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(config.SESSION_DB_PATH)
+def _init_schema(conn: storage._TranslatingConnection) -> None:
     conn.execute(
         "CREATE TABLE IF NOT EXISTS portfolio ("
         "client_id TEXT NOT NULL, ticker TEXT NOT NULL, shares REAL NOT NULL, "
         "updated_at TEXT NOT NULL, PRIMARY KEY (client_id, ticker))"
     )
     # Idempotent migration: NULL cost_basis means "not provided", not zero — P&L stays honestly
-    # unavailable rather than assumed. Pre-V4.3 rows get NULL automatically.
-    cols = [row[1] for row in conn.execute("PRAGMA table_info(portfolio)").fetchall()]
-    if "cost_basis" not in cols:
+    # unavailable rather than assumed. Pre-V4.3 rows get NULL automatically. Postgres supports
+    # ADD COLUMN IF NOT EXISTS natively; sqlite doesn't, so it checks first via PRAGMA.
+    if storage.is_postgres():
+        conn.execute("ALTER TABLE portfolio ADD COLUMN IF NOT EXISTS cost_basis REAL")
+    elif "cost_basis" not in storage.sqlite_columns(conn, "portfolio"):
         conn.execute("ALTER TABLE portfolio ADD COLUMN cost_basis REAL")
-    return conn
+
+
+def _connect() -> storage._TranslatingConnection:
+    return storage.connect(config.SESSION_DB_PATH, init=_init_schema)
 
 
 def _row(ticker: str, shares: float, cost_basis: float | None, updated_at: str) -> dict:
@@ -116,7 +119,7 @@ def status() -> dict:
         count = conn.execute("SELECT COUNT(*) FROM portfolio").fetchone()[0]
     finally:
         conn.close()
-    return {"path": str(config.SESSION_DB_PATH), "rows": count}
+    return {"backend": storage.backend_name(), "path": str(config.SESSION_DB_PATH), "rows": count}
 
 
 def _hhi_band(hhi: float) -> str:

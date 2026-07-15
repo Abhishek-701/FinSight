@@ -15,3 +15,6 @@ yfinance==1.4.1           # free/delayed market data provider for quote/history 
 cachetools==7.1.1         # small TTL cache for market data responses
 httpx==0.28.1             # tests/test_ingest_endpoints.py uses fastapi.testclient (needs httpx);
                           # was previously only a transitive dep of anthropic/chromadb
+psycopg[binary]==3.3.4    # V5.4: optional Postgres backend for sessions/portfolio/watchlist
+                          # (app/storage.py) when DATABASE_URL is set; sqlite stays the default,
+                          # this is only imported (lazily) when that env var is present
