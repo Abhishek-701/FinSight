@@ -1,7 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
-import { markCitations, money } from '../lib/format'
+import { markCitations, money, toolLabel } from '../lib/format'
 import type { ChatTurn } from '../hooks/useChat'
 import type { HistoryRow, NewsItem } from '../lib/types'
 import Sparkline from './Sparkline'
@@ -43,18 +43,35 @@ function MarketStrip({ turn }: { turn: ChatTurn }) {
 }
 
 function ToolTrace({ turn }: { turn: ChatTurn }) {
-  if (!turn.toolCalls?.length) return null
+  const chips = turn.streaming
+    ? turn.liveTools || []
+    : (turn.toolCalls || [])
+        .filter((t) => t.tool !== 'synthesize_report')
+        .map((t) => ({ tool: t.tool, status: t.status === 'error' ? 'error' : 'ok', elapsed_ms: t.elapsed_ms }) as const)
+  if (!chips.length) return null
   return (
     <div className="tool-trace">
       {turn.plan?.strategy && <span className="strategy-badge">{turn.plan.strategy}</span>}
-      {turn.toolCalls
-        .filter((t) => t.tool !== 'synthesize_report')
-        .map((t, i) => (
-          <span key={`${t.tool}-${i}`} className="trace-chip">
-            {t.tool}
-            {typeof t.elapsed_ms === 'number' && <span className="trace-ms"> · {t.elapsed_ms}ms</span>}
-          </span>
-        ))}
+      {chips.map((c, i) => (
+        <span key={`${c.tool}-${i}`} className={`trace-chip trace-chip-${c.status}`}>
+          {toolLabel(c.tool)}
+          {c.status === 'running' && <span className="trace-spinner" />}
+          {typeof c.elapsed_ms === 'number' && <span className="trace-ms"> · {c.elapsed_ms}ms</span>}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function SuggestionChips({ turn, onAsk }: { turn: ChatTurn; onAsk: (q: string) => void }) {
+  if (turn.streaming || !turn.suggestions?.length) return null
+  return (
+    <div className="suggestion-chips">
+      {turn.suggestions.map((q) => (
+        <button key={q} className="chip" onClick={() => onAsk(q)}>
+          {q}
+        </button>
+      ))}
     </div>
   )
 }
@@ -108,6 +125,14 @@ function Sources({ turn }: { turn: ChatTurn }) {
   )
 }
 
+function statusLabel(turn: ChatTurn): string {
+  if (!turn.streaming) return 'Answer'
+  const running = [...(turn.liveTools || [])].reverse().find((t) => t.status === 'running')
+  if (running) return `${toolLabel(running.tool)}…`
+  if (turn.plan?.steps?.length) return 'Planning next step…'
+  return 'Analyzing filings, prices, and calculations...'
+}
+
 export default function MessageBubble({ turn, onAsk }: { turn: ChatTurn; onAsk: (q: string) => void }) {
   return (
     <>
@@ -117,7 +142,7 @@ export default function MessageBubble({ turn, onAsk }: { turn: ChatTurn; onAsk: 
           <div className="agent-avatar">F</div>
           <div>
             <b>FinSight</b>
-            <span>{turn.streaming ? 'Analyzing filings, prices, and calculations...' : 'Answer'}</span>
+            <span>{statusLabel(turn)}</span>
           </div>
         </div>
         {!turn.streaming && <MarketStrip turn={turn} />}
@@ -127,8 +152,9 @@ export default function MessageBubble({ turn, onAsk }: { turn: ChatTurn; onAsk: 
           </ReactMarkdown>
         </div>
         {!turn.streaming && turn.needsIngestTicker && <IngestOfferChip turn={turn} onAsk={onAsk} />}
-        {!turn.streaming && <ToolTrace turn={turn} />}
+        <ToolTrace turn={turn} />
         {!turn.streaming && <Sources turn={turn} />}
+        <SuggestionChips turn={turn} onAsk={onAsk} />
       </article>
     </>
   )

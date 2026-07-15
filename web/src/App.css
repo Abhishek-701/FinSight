@@ -208,8 +208,13 @@ input:focus { border-color: #b9dec4; box-shadow: 0 0 0 4px rgba(12, 166, 120, 0.
 .rank-badge { font-size: 10px; color: var(--muted); background: #eee8db; border-radius: 999px; padding: 1px 7px; width: fit-content; }
 .tool-trace { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
 .strategy-badge { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--green-dark); background: #e8f6ed; border-radius: 999px; padding: 2px 8px; font-weight: 800; }
-.trace-chip { font-size: 11px; color: #5a554c; background: #f1ebe0; border-radius: 999px; padding: 3px 9px; }
+.trace-chip { font-size: 11px; color: #5a554c; background: #f1ebe0; border-radius: 999px; padding: 3px 9px; display: inline-flex; align-items: center; gap: 5px; }
+.trace-chip-running { color: var(--green-dark); background: #e8f6ed; }
+.trace-chip-error { color: var(--red); background: #fbe3e0; }
 .trace-ms { color: var(--muted); }
+.trace-spinner { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--green-dark); border-top-color: transparent; animation: trace-spin 0.7s linear infinite; }
+@keyframes trace-spin { to { transform: rotate(360deg); } }
+.suggestion-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .watchlist-info-btn { border: 0; background: transparent; cursor: pointer; text-align: left; padding: 0; }
 
 /* Ticker Search / On-Demand Ingest */

@@ -18,6 +18,7 @@ export interface ChatResponse {
   refusal_reason?: string
   action?: string | null
   ticker?: string | null
+  suggestions?: string[]
 }
 
 export interface IngestJob {
@@ -100,6 +101,13 @@ export interface ToolCallSummary {
 export interface PlanSummary {
   strategy?: string
   intent?: string
+  steps?: string[]
+}
+
+export interface LiveToolCall {
+  tool: string
+  status: 'running' | 'ok' | 'error'
+  elapsed_ms?: number
 }
 
 export interface ScreenerRow {

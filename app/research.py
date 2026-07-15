@@ -12,7 +12,7 @@ import re
 import time
 from collections.abc import Iterable
 
-from app import config, decompose, facts as facts_mod, retrieve, router, synthesize, universe
+from app import config, decompose, facts as facts_mod, retrieve, router, suggest, synthesize, universe
 from app.agent.context import ConversationContext, contextualize_question
 from app.agent import executor
 from app.agent.router_llm import route_tools
@@ -333,6 +333,13 @@ def _guidance_for(research_plan: dict) -> str | None:
     return None
 
 
+def _suggestions_for(
+    research_plan: dict, route: dict, refused: bool, refusal_reason: str | None,
+) -> list[str]:
+    ticker = route.get("ticker") or next(iter(route.get("tickers") or []), None)
+    return suggest.suggest(research_plan.get("intent"), ticker, refused, refusal_reason)
+
+
 def _merge_evidence(meta: dict, evidence: list[dict]) -> dict:
     """Attach tool evidence to the synthesis context without duplicating chunks.
 
@@ -381,6 +388,41 @@ def _prepare_with_tools(
             "elapsed_ms": _elapsed(tool_start),
         })
     return _merge_evidence(meta, evidence), tool_calls
+
+
+def _prepare_with_tools_events(
+    question: str, route: dict, research_plan: dict, client_id: str | None = None
+):
+    """Streaming twin of _prepare_with_tools: yields ("tool_start"|"tool_result", payload) as
+    each action runs, then a final ("result", (meta, tool_calls)) event. Same merge/fallback
+    logic as the non-streaming path, just driven by executor.execute_events instead of execute.
+    """
+    context = {"question": question, "route": route, "client_id": client_id}
+    tool_calls: list[dict] = []
+    evidence: list[dict] = []
+    for kind, payload in executor.execute_events(research_plan["actions"], context):
+        if kind == "result":
+            tool_calls, evidence = payload
+        else:
+            yield kind, payload
+
+    meta = context.get("meta")
+    if (meta is not None and meta.get("refused") and evidence
+            and research_plan.get("intent") in _MARKET_EVIDENCE_INTENTS):
+        meta = None
+    if not meta and evidence:
+        meta = {"route": route, "sub_queries": [], "retrieval": [], "context_chunks": evidence,
+                "refused": False, "xbrl_hit": False}
+    if not meta:
+        tool_start = time.perf_counter()
+        meta = prepare(question, route)
+        tool_calls.append({
+            "tool": _rag_tool_name(route),
+            "status": "refused" if meta.get("refused") else "ok",
+            "retrieval": meta.get("retrieval", []),
+            "elapsed_ms": _elapsed(tool_start),
+        })
+    yield "result", (_merge_evidence(meta, evidence), tool_calls)
 
 
 def _run_summary(question: str, ticker: str, route: dict, started: float) -> dict:
@@ -499,10 +541,12 @@ def run(
 
     if meta.get("refused"):
         reflection = reflect(meta, meta["answer"])
+        suggestions = _suggestions_for(research_plan, route, True, meta.get("refusal_reason"))
         return {**meta, "plan": research_plan, "tool_calls": tool_calls,
                 "reflection": reflection, "question": question,
                 "contextualized_question": working_question,
                 "conversation_context": context_meta,
+                "suggestions": suggestions,
                 "elapsed_ms": _elapsed(started)}
 
     tool_start = time.perf_counter()
@@ -513,9 +557,11 @@ def run(
         "citations": result["citations"],
         "elapsed_ms": _elapsed(tool_start),
     })
+    suggestions = _suggestions_for(research_plan, route, False, None)
     return {**result, "plan": research_plan, "tool_calls": tool_calls,
             "question": question, "contextualized_question": working_question,
             "conversation_context": context_meta,
+            "suggestions": suggestions,
             "elapsed_ms": _elapsed(started)}
 
 
@@ -607,10 +653,21 @@ def stream_events(
         return
 
     research_plan = plan(working_question, route)
-    meta, tool_calls = _prepare_with_tools(working_question, route, research_plan, client_id)
+    plan_steps = [a["tool"] for a in research_plan.get("actions", []) if a.get("tool") != "synthesize_report"]
+    yield sse("plan", {"strategy": research_plan.get("strategy"), "intent": research_plan.get("intent"),
+                       "steps": plan_steps})
+
+    meta: dict = {}
+    tool_calls: list[dict] = []
+    for kind, payload in _prepare_with_tools_events(working_question, route, research_plan, client_id):
+        if kind == "result":
+            meta, tool_calls = payload
+        else:
+            yield sse(kind, payload)
 
     if meta.get("refused"):
         reflection = reflect(meta, meta["answer"])
+        suggestions = _suggestions_for(research_plan, route, True, meta.get("refusal_reason"))
         yield sse("token", {"text": meta["answer"]})
         yield sse("done", {"citations": [], "gaps": [], "refused": True,
                            "refusal_reason": meta["refusal_reason"],
@@ -619,6 +676,7 @@ def stream_events(
                            "reflection": reflection, "question": question,
                            "contextualized_question": working_question,
                            "conversation_context": context_meta,
+                           "suggestions": suggestions,
                            "elapsed_ms": _elapsed(started)})
         return
 
@@ -647,9 +705,11 @@ def stream_events(
         "data": ctx[cid].get("data", {}),
         "facts": ctx[cid].get("facts", []),
     } for cid in cited if cid in ctx]
+    suggestions = _suggestions_for(research_plan, route, False, None)
     yield sse("done", {"citations": citations, "gaps": reflection["gaps"], "refused": False,
                        "plan": research_plan, "tool_calls": tool_calls,
                        "reflection": reflection, "question": question,
                        "contextualized_question": working_question,
                        "conversation_context": context_meta,
+                       "suggestions": suggestions,
                        "elapsed_ms": _elapsed(started)})

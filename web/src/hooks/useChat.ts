@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getSession, streamChat } from '../lib/api'
 import { getClientId } from '../lib/clientId'
 import { titleFromQuestion } from '../lib/format'
-import type { CitationDetail, PlanSummary, ToolCallSummary } from '../lib/types'
+import type { CitationDetail, LiveToolCall, PlanSummary, ToolCallSummary } from '../lib/types'
 
 export interface ChatTurn {
   question: string
@@ -12,6 +12,8 @@ export interface ChatTurn {
   refused?: boolean
   toolCalls?: ToolCallSummary[]
   plan?: PlanSummary
+  liveTools?: LiveToolCall[]
+  suggestions?: string[]
   needsIngestTicker?: string | null
 }
 
@@ -102,6 +104,36 @@ export function useChat() {
             setSessionId(sid)
             localStorage.setItem(SESSION_KEY, sid)
             upsertWindow(sid, question)
+          } else if (evt.event === 'plan') {
+            const plan = evt.data as PlanSummary
+            setTurns((prev) => {
+              const next = [...prev]
+              const last = next[next.length - 1]
+              next[next.length - 1] = { ...last, plan }
+              return next
+            })
+          } else if (evt.event === 'tool_start') {
+            const tool = evt.data.tool as string
+            setTurns((prev) => {
+              const next = [...prev]
+              const last = next[next.length - 1]
+              const liveTools = [...(last.liveTools || []), { tool, status: 'running' as const }]
+              next[next.length - 1] = { ...last, liveTools }
+              return next
+            })
+          } else if (evt.event === 'tool_result') {
+            const status = evt.data.status === 'error' ? 'error' : 'ok'
+            const elapsed_ms = evt.data.elapsed_ms as number | undefined
+            setTurns((prev) => {
+              const next = [...prev]
+              const last = next[next.length - 1]
+              const liveTools = [...(last.liveTools || [])]
+              if (liveTools.length) {
+                liveTools[liveTools.length - 1] = { ...liveTools[liveTools.length - 1], status, elapsed_ms }
+              }
+              next[next.length - 1] = { ...last, liveTools }
+              return next
+            })
           } else if (evt.event === 'token') {
             const text = evt.data.text as string
             setTurns((prev) => {
@@ -115,6 +147,7 @@ export function useChat() {
             const refused = Boolean(evt.data.refused)
             const toolCalls = (evt.data.tool_calls as ToolCallSummary[]) || []
             const plan = (evt.data.plan as PlanSummary) || undefined
+            const suggestions = (evt.data.suggestions as string[]) || []
             const needsIngestTicker =
               evt.data.action === 'offer_ingest' ? (evt.data.ticker as string) : null
             setTurns((prev) => {
@@ -126,6 +159,7 @@ export function useChat() {
                 refused,
                 toolCalls,
                 plan,
+                suggestions,
                 needsIngestTicker,
                 streaming: false,
               }

@@ -29,3 +29,21 @@ export function num(value: number | null | undefined, dp = 2): string | null {
   if (value === null || value === undefined || Number.isNaN(value)) return null
   return value.toLocaleString(undefined, { maximumFractionDigits: dp })
 }
+
+const TOOL_LABELS: Record<string, string> = {
+  facts_lookup: 'Looking up filed financials',
+  filing_rag: 'Searching filings',
+  multi_company_compare: 'Comparing filings',
+  market_quote: 'Fetching live quote',
+  market_history: 'Fetching price history',
+  news_headlines: 'Checking recent news',
+  compute_metric: 'Computing ratios',
+  screen_companies: 'Ranking companies',
+  company_insight: 'Assembling insight brief',
+  portfolio_context: 'Reading your portfolio',
+  refuse_or_clarify: 'Checking coverage',
+}
+
+export function toolLabel(tool: string): string {
+  return TOOL_LABELS[tool] || tool.replace(/_/g, ' ')
+}
