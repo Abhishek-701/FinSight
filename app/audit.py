@@ -98,6 +98,37 @@ def recent(limit: int = 50) -> list[dict]:
     ]
 
 
+def window(since_iso: str) -> list[dict]:
+    """All rows with created_at >= since_iso (ISO-8601 UTC string) — used by the V6.4 admin
+    aggregates (top questions, refusal rate over a window)."""
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT created_at, request_id, session_id, client_id, question, "
+            "contextualized_question, refused, citations, tool_calls, elapsed_ms "
+            "FROM audit WHERE created_at >= ?",
+            (since_iso,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [
+        {
+            "created_at": created_at,
+            "request_id": request_id,
+            "session_id": session_id,
+            "client_id": client_id,
+            "question": question,
+            "contextualized_question": contextualized_question,
+            "refused": bool(refused),
+            "citations": json.loads(citations),
+            "tool_calls": json.loads(tool_calls),
+            "elapsed_ms": elapsed_ms,
+        }
+        for created_at, request_id, session_id, client_id, question, contextualized_question,
+        refused, citations, tool_calls, elapsed_ms in rows
+    ]
+
+
 def status() -> dict:
     conn = _connect()
     try:

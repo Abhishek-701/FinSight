@@ -7,6 +7,7 @@ import ScreenerView from './components/ScreenerView'
 import CompareView from './components/CompareView'
 import PortfolioView from './components/PortfolioView'
 import InsightView from './components/InsightView'
+import AdminView from './components/AdminView'
 import UserMenu from './components/UserMenu'
 import { useChat } from './hooks/useChat'
 import { useAuth } from './hooks/useAuth'
@@ -16,7 +17,7 @@ import './App.css'
 
 function App() {
   const { sessionId, turns, isBusy, chatWindows, recentSearches, ask, newChat, switchChat } = useChat()
-  const { user, loading: authLoading, login, logout } = useAuth()
+  const { user, isAdmin, loading: authLoading, login, logout } = useAuth()
   const [companies, setCompanies] = useState<Record<string, string>>({})
   const [online, setOnline] = useState(true)
   const [view, setView] = useState<View>('chat')
@@ -77,6 +78,7 @@ function App() {
     compare: 'Side-by-side comparison',
     portfolio: 'Track your holdings and allocation',
     insight: 'Quote, valuation, ranks, and filing narrative for one company',
+    admin: 'Requests, latency, token spend, and refusal rate',
   }
 
   return (
@@ -87,6 +89,7 @@ function App() {
         recentSearches={recentSearches}
         sessionId={sessionId}
         isBusy={isBusy}
+        isAdmin={isAdmin}
         onNavigate={setView}
         onNewChat={handleNewChat}
         onSwitchChat={switchChat}
@@ -119,6 +122,7 @@ function App() {
           {view === 'compare' && <CompareView tickers={compareTickers} />}
           {view === 'portfolio' && <PortfolioView onExplain={handleExplainPortfolio} />}
           {view === 'insight' && <InsightView companies={companies} initialTicker={insightTicker} />}
+          {view === 'admin' && isAdmin && <AdminView />}
         </section>
         {view === 'chat' && <Composer isBusy={isBusy} onAsk={ask} onClear={newChat} />}
       </main>

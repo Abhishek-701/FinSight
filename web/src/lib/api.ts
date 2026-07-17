@@ -1,4 +1,6 @@
 import type {
+  AdminAuditRow,
+  AdminSummary,
   BenchmarkResult,
   ChatResponse,
   HistoryPeriod,
@@ -197,4 +199,12 @@ export function postWhatif(clientId: string, trades: WhatifTrade[]): Promise<Wha
 
 export function getBenchmark(clientId: string, period: HistoryPeriod): Promise<BenchmarkResult> {
   return jsonFetch(`/api/portfolio/benchmark?client_id=${encodeURIComponent(clientId)}&period=${period}`)
+}
+
+export function getAdminSummary(days = 7): Promise<AdminSummary> {
+  return jsonFetch(`/api/admin/summary?days=${days}`)
+}
+
+export function getAdminAudit(limit = 20): Promise<{ rows: AdminAuditRow[] }> {
+  return jsonFetch(`/api/admin/audit?limit=${limit}`)
 }

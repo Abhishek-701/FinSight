@@ -9,6 +9,7 @@ interface Props {
   recentSearches: string[]
   sessionId: string | null
   isBusy: boolean
+  isAdmin: boolean
   onNavigate: (view: View) => void
   onNewChat: () => void
   onSwitchChat: (id: string) => void
@@ -30,12 +31,14 @@ export default function Sidebar({
   recentSearches,
   sessionId,
   isBusy,
+  isAdmin,
   onNavigate,
   onNewChat,
   onSwitchChat,
   onRecentClick,
   onCompanyAdded,
 }: Props) {
+  const navItems = isAdmin ? [...NAV_ITEMS, { view: 'admin' as View, label: 'Admin' }] : NAV_ITEMS
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -46,7 +49,7 @@ export default function Sidebar({
         </div>
       </div>
       <nav className="nav">
-        {NAV_ITEMS.map((item) => (
+        {navItems.map((item) => (
           <button
             key={item.view}
             className={view === item.view ? 'active' : ''}

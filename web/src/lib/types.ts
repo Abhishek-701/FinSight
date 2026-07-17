@@ -90,7 +90,7 @@ export interface Turn {
   data: ChatResponse
 }
 
-export type View = 'chat' | 'screener' | 'compare' | 'portfolio' | 'insight'
+export type View = 'chat' | 'screener' | 'compare' | 'portfolio' | 'insight' | 'admin'
 
 export interface ToolCallSummary {
   tool: string
@@ -283,4 +283,79 @@ export interface AuthUser {
 export interface MeResponse {
   user: AuthUser | null
   is_admin: boolean
+}
+
+export interface AdminDayCount {
+  date: string
+  count: number
+  errors: number
+}
+
+export interface AdminDayTokens {
+  date: string
+  input: number
+  output: number
+}
+
+export interface AdminRouteLatency {
+  route: string
+  count: number
+  p50: number | null
+  p95: number | null
+}
+
+export interface AdminModelUsage {
+  model: string
+  input: number
+  output: number
+  calls: number
+  est_cost_usd: number
+}
+
+export interface AdminTopQuestion {
+  question: string
+  count: number
+}
+
+export interface AdminSummary {
+  window_days: number
+  requests: {
+    total: number
+    per_day: AdminDayCount[]
+    error_rate: number
+  }
+  latency_ms: {
+    overall: { p50: number | null; p95: number | null }
+    by_route: AdminRouteLatency[]
+  }
+  tokens: {
+    input: number
+    output: number
+    embed: number
+    per_day: AdminDayTokens[]
+    est_cost_usd: number
+    by_model: AdminModelUsage[]
+  }
+  chat: {
+    turns: number
+    refusal_rate: number
+    top_questions: AdminTopQuestion[]
+  }
+  users: {
+    total: number
+    active_sessions: number
+  }
+}
+
+export interface AdminAuditRow {
+  created_at: string
+  request_id: string | null
+  session_id: string | null
+  client_id: string | null
+  question: string | null
+  contextualized_question: string | null
+  refused: boolean
+  citations: string[]
+  tool_calls: unknown[]
+  elapsed_ms: number | null
 }

@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import audit, auth, config, corpus, ingest_jobs, insight, metrics, obs, portfolio, research, screener, storage, universe, watchlist
+from app import admin, audit, auth, config, corpus, ingest_jobs, insight, metrics, obs, portfolio, research, screener, storage, universe, watchlist
 from app.agent import session
 from app.agent.context import from_history
 from app.tools import market, news as news_tool
@@ -371,6 +371,33 @@ def auth_claim(req: ClaimRequest, request: Request):
     user = auth.require_user(request)
     updated = auth.claim(user, req.client_id)
     return {"user": _user_payload(updated)}
+
+
+def _require_admin(request: Request) -> dict:
+    user = auth.current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="login_required")
+    if not auth.is_admin(user):
+        raise HTTPException(status_code=403, detail="admin_required")
+    return user
+
+
+@app.get("/api/admin/summary")
+def admin_summary(request: Request, days: int = 7):
+    _require_admin(request)
+    return admin.summary(days=days)
+
+
+@app.get("/api/admin/requests")
+def admin_requests(request: Request, limit: int = 50):
+    _require_admin(request)
+    return {"rows": metrics.recent(limit=limit)}
+
+
+@app.get("/api/admin/audit")
+def admin_audit(request: Request, limit: int = 50):
+    _require_admin(request)
+    return {"rows": audit.recent(limit=limit)}
 
 
 @app.get("/api/quote/{ticker}")

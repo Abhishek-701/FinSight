@@ -223,6 +223,24 @@ def require_user(request: Request) -> dict:
     return user
 
 
+def count_users() -> int:
+    conn = _connect()
+    try:
+        return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def count_active_sessions() -> int:
+    conn = _connect()
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) FROM auth_sessions WHERE expires_at > ?", (_now(),),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
 def claim(user: dict, anon_client_id: str) -> dict:
     """Re-key anonymous portfolio/watchlist/message rows to this user, once, right after first
     login. Returns the updated user row.
