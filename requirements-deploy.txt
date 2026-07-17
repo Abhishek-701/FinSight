@@ -14,3 +14,5 @@ tiktoken==0.8.0
 yfinance==1.4.1
 cachetools==7.1.1
 psycopg[binary]==3.3.4
+httpx==0.28.1            # V6.3: Google OAuth token exchange + userinfo calls; was previously
+                          # only a transitive dep of anthropic (pinned now that we call it directly)

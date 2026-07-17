@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import audit, config, corpus, ingest_jobs, insight, portfolio, research, screener, universe, watchlist
+from app import audit, config, corpus, ingest_jobs, insight, metrics, portfolio, research, screener, storage, universe, watchlist
 from app.agent import session
 from app.agent.context import from_history
 from app.tools import market, news as news_tool
@@ -82,6 +82,23 @@ def _guard(request: Request, x_api_key: str | None = Header(default=None)) -> No
 
 def _corpus_status() -> dict:
     return corpus.status()
+
+
+def _database_status() -> dict:
+    started = time.perf_counter()
+    try:
+        conn = storage.connect(config.SESSION_DB_PATH)
+        try:
+            conn.execute("SELECT 1")
+        finally:
+            conn.close()
+        return {
+            "backend": storage.backend_name(),
+            "ok": True,
+            "latency_ms": round((time.perf_counter() - started) * 1000),
+        }
+    except Exception as exc:  # noqa: BLE001 — health check must never 500 the endpoint
+        return {"backend": storage.backend_name(), "ok": False, "error": str(exc)}
 
 
 def _startup_errors() -> list[str]:
@@ -415,6 +432,8 @@ def health():
         "watchlist_store": watchlist.status(),
         "portfolio_store": portfolio.status(),
         "audit_log": audit.status(),
+        "metrics_store": metrics.status(),
+        "database": _database_status(),
         "corpus": _corpus_status(),
         "external_state": {
             "postgres_configured": bool(config.DATABASE_URL),

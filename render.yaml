@@ -1,3 +1,11 @@
+databases:
+  - name: finsight-db
+    plan: free
+    # Render free Postgres expires 90 days after creation. When it does, /health's
+    # `database.ok` flips to false — recreate the database and it re-links via
+    # `fromDatabase` below (no code change needed, but session/portfolio/watchlist data
+    # in the old database is gone).
+
 services:
   - type: web
     name: finsight
@@ -13,3 +21,7 @@ services:
         value: "0"
       - key: FINSIGHT_RATE_LIMIT_PER_MINUTE
         value: "30"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: finsight-db
+          property: connectionString

@@ -174,7 +174,6 @@ CHUNKS_PATH = _ROOT / "data" / "chunks.json"
 CHROMA_DIR = str(_ROOT / "data" / "chroma")
 COLLECTION = "filings"
 SESSION_DB_PATH = _ROOT / "data" / "sessions.sqlite3"
-AUDIT_LOG_PATH = _ROOT / "data" / "audit.jsonl"
 WEB_DIST = _ROOT / "static" / "dist"  # built React SPA (Phase 3); falls back to static/index.html
 
 # --- Dynamic (on-demand ingested) companies (V4.0+) ---
