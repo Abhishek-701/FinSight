@@ -5,6 +5,7 @@ import type {
   HistoryResult,
   InsightBrief,
   IngestJob,
+  MeResponse,
   PortfolioAnalysis,
   PortfolioItem,
   QuoteResult,
@@ -82,8 +83,27 @@ export function getInsight(ticker: string): Promise<InsightBrief> {
   return jsonFetch(`/api/insight/${encodeURIComponent(ticker)}`)
 }
 
-export function getSession(sessionId: string): Promise<{ session_id: string; messages: SessionMessage[] }> {
-  return jsonFetch(`/api/sessions/${encodeURIComponent(sessionId)}`)
+export function getSession(
+  sessionId: string, clientId?: string | null
+): Promise<{ session_id: string; messages: SessionMessage[] }> {
+  const qs = clientId ? `?client_id=${encodeURIComponent(clientId)}` : ''
+  return jsonFetch(`/api/sessions/${encodeURIComponent(sessionId)}${qs}`)
+}
+
+export function getMe(): Promise<MeResponse> {
+  return jsonFetch('/api/auth/me')
+}
+
+export function logout(): Promise<{ ok: boolean }> {
+  return jsonFetch('/api/auth/logout', { method: 'POST' })
+}
+
+export function claimClientId(clientId: string): Promise<{ user: MeResponse['user'] }> {
+  return jsonFetch('/api/auth/claim', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId }),
+  })
 }
 
 export function getCompanies(): Promise<{ companies: Record<string, string> }> {

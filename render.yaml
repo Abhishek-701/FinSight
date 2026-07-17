@@ -25,3 +25,17 @@ services:
         fromDatabase:
           name: finsight-db
           property: connectionString
+      # V6.3 Google OAuth — login is optional/additive; unset, the app runs anonymous-only.
+      # FINSIGHT_BASE_URL must match this service's real URL (known only after first deploy)
+      # and must be registered as an authorized redirect URI (BASE_URL + /api/auth/google/callback)
+      # in the Google Cloud OAuth client console.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: FINSIGHT_BASE_URL
+        sync: false
+      - key: FINSIGHT_COOKIE_SECURE
+        value: "1"
+      - key: FINSIGHT_ADMIN_EMAILS
+        sync: false

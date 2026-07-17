@@ -7,18 +7,32 @@ import ScreenerView from './components/ScreenerView'
 import CompareView from './components/CompareView'
 import PortfolioView from './components/PortfolioView'
 import InsightView from './components/InsightView'
+import UserMenu from './components/UserMenu'
 import { useChat } from './hooks/useChat'
+import { useAuth } from './hooks/useAuth'
 import { getCompanies } from './lib/api'
 import type { View } from './lib/types'
 import './App.css'
 
 function App() {
   const { sessionId, turns, isBusy, chatWindows, recentSearches, ask, newChat, switchChat } = useChat()
+  const { user, loading: authLoading, login, logout } = useAuth()
   const [companies, setCompanies] = useState<Record<string, string>>({})
   const [online, setOnline] = useState(true)
   const [view, setView] = useState<View>('chat')
   const [compareTickers, setCompareTickers] = useState<string[]>([])
   const [insightTicker, setInsightTicker] = useState<string | null>(null)
+  const [authError, setAuthError] = useState(
+    () => new URLSearchParams(window.location.search).get('auth_error') === '1'
+  )
+
+  useEffect(() => {
+    if (authError) {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('auth_error')
+      window.history.replaceState({}, '', url)
+    }
+  }, [authError])
 
   const refreshCompanies = useCallback(() => {
     getCompanies()
@@ -85,11 +99,20 @@ function App() {
             <h1>FinSight</h1>
             <p>{titles[view]}</p>
           </div>
-          <div className="status">
-            <span className="dot" style={{ background: online ? undefined : '#c0392b' }} />
-            {online ? 'Online' : 'Offline'}
+          <div className="topbar-right">
+            <div className="status">
+              <span className="dot" style={{ background: online ? undefined : '#c0392b' }} />
+              {online ? 'Online' : 'Offline'}
+            </div>
+            <UserMenu user={user} loading={authLoading} onLogin={login} onLogout={logout} />
           </div>
         </header>
+        {authError && (
+          <div className="auth-error-banner">
+            Sign-in didn't complete. Please try again.
+            <button onClick={() => setAuthError(false)}>Dismiss</button>
+          </div>
+        )}
         <section className="workspace">
           {view === 'chat' && <ChatView turns={turns} onAsk={ask} />}
           {view === 'screener' && <ScreenerView onCompare={handleCompare} onInsight={handleInsight} />}

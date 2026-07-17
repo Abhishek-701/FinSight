@@ -271,3 +271,16 @@ export interface InsightBrief extends InsightCardData {
   tool_calls: ToolCallSummary[]
   elapsed_ms: number
 }
+
+export interface AuthUser {
+  id: string
+  email: string
+  name: string | null
+  picture: string | null
+  claimed: boolean
+}
+
+export interface MeResponse {
+  user: AuthUser | null
+  is_admin: boolean
+}

@@ -6,17 +6,19 @@ Run the four checkpoint questions:  python -m app.main
 
 import json
 import logging
+import secrets
 import time
 import uuid
 from collections import defaultdict, deque
 
+import httpx
 from fastapi import Header, HTTPException, Request
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import audit, config, corpus, ingest_jobs, insight, metrics, obs, portfolio, research, screener, storage, universe, watchlist
+from app import audit, auth, config, corpus, ingest_jobs, insight, metrics, obs, portfolio, research, screener, storage, universe, watchlist
 from app.agent import session
 from app.agent.context import from_history
 from app.tools import market, news as news_tool
@@ -65,6 +67,10 @@ class WhatifTrade(BaseModel):
 class WhatifRequest(BaseModel):
     client_id: str
     trades: list[WhatifTrade]
+
+
+class ClaimRequest(BaseModel):
+    client_id: str
 
 
 def _guard(request: Request, x_api_key: str | None = Header(default=None)) -> None:
@@ -226,23 +232,31 @@ def research_result(q: str, request: Request, x_api_key: str | None = Header(def
 @app.post("/api/chat")
 def chat(req: ChatRequest, request: Request, x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
+    client_id = auth.resolve_client_id(request, req.client_id)
     sid = req.session_id or session.new_session_id()
+    if req.session_id:
+        owner_id = session.owner(sid)
+        if owner_id is not None and owner_id != client_id:
+            # Someone else's session_id — a different anonymous client_id or a different
+            # logged-in user. Same "not found" as an unknown id, so this doesn't confirm the
+            # session exists to a caller who isn't its owner.
+            raise HTTPException(status_code=404, detail="session_not_found")
     prior_history = session.history(sid)
     conversation_context = from_history(prior_history)
-    session.append(sid, "user", req.message)
-    obs.set_extra("client_id", req.client_id)
+    session.append(sid, "user", req.message, client_id=client_id)
+    obs.set_extra("client_id", client_id)
     if req.stream:
         def on_done(payload: dict) -> None:
             # The streaming path never used to persist the assistant turn or audit it — only
             # the non-streaming branch below did. Wired here via research.stream_events's
             # on_done hook, which fires once the full answer text is known.
             session.append(sid, "assistant", payload["answer_text"],
-                            {"tool_calls": payload.get("tool_calls", [])})
+                            {"tool_calls": payload.get("tool_calls", [])}, client_id=client_id)
             obs.set_extra("refused", payload.get("refused", False))
             audit.record({
                 "request_id": obs.get_request_id(),
                 "session_id": sid,
-                "client_id": req.client_id,
+                "client_id": client_id,
                 "question": req.message,
                 "contextualized_question": payload.get("contextualized_question"),
                 "citations": payload.get("citations", []),
@@ -254,18 +268,19 @@ def chat(req: ChatRequest, request: Request, x_api_key: str | None = Header(defa
         def events():
             yield research.sse("session", {"session_id": sid})
             yield from research.stream_events(
-                req.message, conversation_context, req.client_id, on_done=on_done,
+                req.message, conversation_context, client_id, on_done=on_done,
             )
         return StreamingResponse(events(), media_type="text/event-stream")
 
-    result = research.run(req.message, conversation_context, req.client_id)
+    result = research.run(req.message, conversation_context, client_id)
     result["session_id"] = sid
-    session.append(sid, "assistant", result["answer"], {"tool_calls": result.get("tool_calls", [])})
+    session.append(sid, "assistant", result["answer"], {"tool_calls": result.get("tool_calls", [])},
+                    client_id=client_id)
     obs.set_extra("refused", result.get("refused", False))
     audit.record({
         "request_id": obs.get_request_id(),
         "session_id": sid,
-        "client_id": req.client_id,
+        "client_id": client_id,
         "question": req.message,
         "contextualized_question": result.get("contextualized_question"),
         "citations": result.get("citations", []),
@@ -277,9 +292,85 @@ def chat(req: ChatRequest, request: Request, x_api_key: str | None = Header(defa
 
 
 @app.get("/api/sessions/{session_id}")
-def get_session(session_id: str, request: Request, x_api_key: str | None = Header(default=None)):
+def get_session(session_id: str, request: Request, client_id: str | None = None,
+                x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
+    resolved = auth.resolve_client_id(request, client_id)
+    owner_id = session.owner(session_id)
+    if owner_id is not None and owner_id != resolved:
+        raise HTTPException(status_code=404, detail="session_not_found")
     return {"session_id": session_id, "messages": session.history(session_id)}
+
+
+# --- Google OAuth (V6.3) — no _guard(): these are either top-level browser navigations that
+# can't carry a custom x-api-key header (login/callback), or SPA fetch() calls that already
+# don't send one today (me/logout/claim — same as every other frontend call), matching the
+# existing no-guard precedent for GET /api/companies. Login is entirely optional/additive; if
+# GOOGLE_CLIENT_ID/SECRET aren't set, login/callback 404 and the app works anonymously.
+@app.get("/api/auth/google/login")
+def auth_login():
+    if not auth.is_configured():
+        raise HTTPException(status_code=404, detail="oauth_not_configured")
+    state = secrets.token_urlsafe(24)
+    resp = RedirectResponse(auth.login_url(state))
+    resp.set_cookie(auth.STATE_COOKIE, state, max_age=300, httponly=True,
+                     secure=config.COOKIE_SECURE, samesite="lax")
+    return resp
+
+
+@app.get("/api/auth/google/callback")
+def auth_callback(request: Request, code: str | None = None, state: str | None = None):
+    expected_state = request.cookies.get(auth.STATE_COOKIE)
+    if not auth.is_configured() or not code or not state or state != expected_state:
+        resp = RedirectResponse("/?auth_error=1")
+        resp.delete_cookie(auth.STATE_COOKIE)
+        return resp
+    try:
+        token_response = auth.exchange_code(code)
+        userinfo = auth.fetch_userinfo(token_response["access_token"])
+        user = auth.upsert_user(userinfo)
+    except Exception:  # noqa: BLE001 — any OAuth-flow failure lands on the same error redirect
+        resp = RedirectResponse("/?auth_error=1")
+        resp.delete_cookie(auth.STATE_COOKIE)
+        return resp
+    session_token = auth.create_session(user["id"])
+    resp = RedirectResponse("/")
+    resp.delete_cookie(auth.STATE_COOKIE)
+    resp.set_cookie(auth.SESSION_COOKIE, session_token, max_age=60 * 60 * 24 * 30,
+                     httponly=True, secure=config.COOKIE_SECURE, samesite="lax")
+    return resp
+
+
+def _user_payload(user: dict) -> dict:
+    return {
+        "id": user["id"], "email": user["email"], "name": user["name"],
+        "picture": user["picture"], "claimed": user["claimed_client_id"] is not None,
+    }
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request):
+    user = auth.current_user(request)
+    if user is None:
+        return {"user": None, "is_admin": False}
+    return {"user": _user_payload(user), "is_admin": auth.is_admin(user)}
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request):
+    token = request.cookies.get(auth.SESSION_COOKIE)
+    if token:
+        auth.revoke_session(token)
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(auth.SESSION_COOKIE)
+    return resp
+
+
+@app.post("/api/auth/claim")
+def auth_claim(req: ClaimRequest, request: Request):
+    user = auth.require_user(request)
+    updated = auth.claim(user, req.client_id)
+    return {"user": _user_payload(updated)}
 
 
 @app.get("/api/quote/{ticker}")
@@ -303,14 +394,16 @@ def companies():
 @app.get("/api/watchlist")
 def get_watchlist(client_id: str, request: Request, x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
+    client_id = auth.resolve_client_id(request, client_id)
     return {"client_id": client_id, "items": watchlist.items(client_id)}
 
 
 @app.post("/api/watchlist")
 def add_watchlist(req: WatchlistRequest, request: Request, x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
+    client_id = auth.resolve_client_id(request, req.client_id)
     try:
-        items = watchlist.add(req.client_id, req.ticker)
+        items = watchlist.add(client_id, req.ticker)
     except ValueError:
         raise HTTPException(status_code=400, detail="unsupported_ticker")
     return {"ok": True, "items": items}
@@ -319,6 +412,7 @@ def add_watchlist(req: WatchlistRequest, request: Request, x_api_key: str | None
 @app.delete("/api/watchlist/{ticker}")
 def remove_watchlist(ticker: str, client_id: str, request: Request, x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
+    client_id = auth.resolve_client_id(request, client_id)
     return {"ok": True, "items": watchlist.remove(client_id, ticker)}
 
 
@@ -348,6 +442,7 @@ def screener_snapshot(request: Request, x_api_key: str | None = Header(default=N
 @app.get("/api/portfolio")
 def get_portfolio(client_id: str, request: Request, x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
+    client_id = auth.resolve_client_id(request, client_id)
     return {"client_id": client_id, "items": portfolio.items(client_id)}
 
 
@@ -355,17 +450,19 @@ def get_portfolio(client_id: str, request: Request, x_api_key: str | None = Head
 def set_portfolio_holding(req: PortfolioRequest, request: Request,
                           x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
+    client_id = auth.resolve_client_id(request, req.client_id)
     try:
-        items = portfolio.set_holding(req.client_id, req.ticker, req.shares, req.cost_basis)
+        items = portfolio.set_holding(client_id, req.ticker, req.shares, req.cost_basis)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return {"client_id": req.client_id, "items": items}
+    return {"client_id": client_id, "items": items}
 
 
 @app.delete("/api/portfolio/{ticker}")
 def remove_portfolio_holding(ticker: str, client_id: str, request: Request,
                              x_api_key: str | None = Header(default=None)):
     _guard(request, x_api_key)
+    client_id = auth.resolve_client_id(request, client_id)
     items = portfolio.remove(client_id, ticker)
     return {"client_id": client_id, "items": items}
 
@@ -375,6 +472,7 @@ def portfolio_analysis(client_id: str, request: Request, x_api_key: str | None =
     """Live valuation, P&L (where a cost basis was entered), and concentration — the computed
     view; GET /api/portfolio above stays the plain editable holdings list."""
     _guard(request, x_api_key)
+    client_id = auth.resolve_client_id(request, client_id)
     return portfolio.analyze(client_id)
 
 
@@ -382,9 +480,10 @@ def portfolio_analysis(client_id: str, request: Request, x_api_key: str | None =
 def portfolio_whatif(req: WhatifRequest, request: Request, x_api_key: str | None = Header(default=None)):
     """Simulate hypothetical share deltas on top of current holdings — never persisted."""
     _guard(request, x_api_key)
+    client_id = auth.resolve_client_id(request, req.client_id)
     trades = [{"ticker": t.ticker, "delta_shares": t.delta_shares} for t in req.trades]
     try:
-        return portfolio.whatif(req.client_id, trades)
+        return portfolio.whatif(client_id, trades)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -396,6 +495,7 @@ def portfolio_benchmark(
 ):
     """Portfolio value history (today's shares, static weights) vs SPY over the same period."""
     _guard(request, x_api_key)
+    client_id = auth.resolve_client_id(request, client_id)
     if period not in config.MARKET_HISTORY_PERIODS:
         raise HTTPException(status_code=400, detail="invalid_period")
     return portfolio.benchmark(client_id, period)

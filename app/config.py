@@ -169,6 +169,13 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 REDIS_URL = os.getenv("REDIS_URL", "")
 LOG_LEVEL = os.getenv("FINSIGHT_LOG_LEVEL", "INFO")
 
+# --- Google OAuth (V6.3) — optional; login is additive, anonymous client_id mode always works ---
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+BASE_URL = os.getenv("FINSIGHT_BASE_URL", "http://localhost:8000")
+COOKIE_SECURE = os.getenv("FINSIGHT_COOKIE_SECURE", "0") == "1"
+ADMIN_EMAILS = {e.strip().lower() for e in os.getenv("FINSIGHT_ADMIN_EMAILS", "").split(",") if e.strip()}
+
 # USD per 1M tokens (input, output) — used only to estimate cost for the V6.4 admin dashboard.
 # Token counts stored in request_metrics are the ground truth; prices drift, so they're kept
 # here rather than baked into stored rows, and read at aggregation time (app/admin.py).

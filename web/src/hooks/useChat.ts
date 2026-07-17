@@ -208,7 +208,7 @@ export function useChat() {
       }
       setTurns([])
       try {
-        const data = await getSession(id)
+        const data = await getSession(id, getClientId())
         const restored: ChatTurn[] = []
         for (const msg of data.messages) {
           if (msg.role === 'user') {
