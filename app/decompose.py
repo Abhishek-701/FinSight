@@ -4,7 +4,7 @@ one self-contained sub-query per company (structured JSON output). See locked ar
 
 import anthropic
 
-from app import config
+from app import config, obs
 
 _client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env (loaded by config)
 
@@ -46,6 +46,7 @@ def decompose(question: str, tickers: list[str]) -> list[dict]:
         messages=[{"role": "user", "content": f"Companies: {targets}\nQuestion: {question}"}],
         output_config={"format": {"type": "json_schema", "schema": _SCHEMA}},
     )
+    obs.add_llm_usage(config.CHAT_MODEL, msg.usage.input_tokens, msg.usage.output_tokens)
     import json
     text = next(b.text for b in msg.content if b.type == "text")
     subs = json.loads(text)["sub_queries"]

@@ -167,6 +167,16 @@ API_KEY = os.getenv("FINSIGHT_API_KEY", "")
 RATE_LIMIT_PER_MINUTE = int(os.getenv("FINSIGHT_RATE_LIMIT_PER_MINUTE", "60"))
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 REDIS_URL = os.getenv("REDIS_URL", "")
+LOG_LEVEL = os.getenv("FINSIGHT_LOG_LEVEL", "INFO")
+
+# USD per 1M tokens (input, output) — used only to estimate cost for the V6.4 admin dashboard.
+# Token counts stored in request_metrics are the ground truth; prices drift, so they're kept
+# here rather than baked into stored rows, and read at aggregation time (app/admin.py).
+MODEL_PRICES: dict[str, tuple[float, float]] = {
+    CHAT_MODEL: (3.00, 15.00),
+    ROUTER_MODEL: (1.00, 5.00),
+    EMBED_MODEL: (0.02, 0.0),
+}
 
 # --- Storage ---
 _ROOT = Path(__file__).resolve().parent.parent

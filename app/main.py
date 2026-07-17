@@ -12,11 +12,11 @@ from collections import defaultdict, deque
 
 from fastapi import Header, HTTPException, Request
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import audit, config, corpus, ingest_jobs, insight, metrics, portfolio, research, screener, storage, universe, watchlist
+from app import audit, config, corpus, ingest_jobs, insight, metrics, obs, portfolio, research, screener, storage, universe, watchlist
 from app.agent import session
 from app.agent.context import from_history
 from app.tools import market, news as news_tool
@@ -26,6 +26,7 @@ prepare = research.prepare
 answer = research.answer
 
 
+obs.setup_logging(config.LOG_LEVEL)
 app = FastAPI()
 log = logging.getLogger("fairway.api")
 
@@ -122,18 +123,86 @@ def validate_startup() -> None:
 @app.middleware("http")
 async def request_logging(request: Request, call_next):
     request_id = uuid.uuid4().hex[:12]
+    obs.seed(request_id)
     started = time.perf_counter()
-    response = await call_next(request)
-    elapsed_ms = round((time.perf_counter() - started) * 1000)
+    method, path = request.method, request.url.path
+
+    def _route() -> str:
+        route_obj = request.scope.get("route")
+        return route_obj.path if route_obj else path
+
+    def _finalize(status_code: int, stream_error: str | None) -> None:
+        # Called immediately for ordinary responses, or after the body has fully drained for
+        # StreamingResponse (SSE) — measuring elapsed_ms/tokens right after call_next returns
+        # would undercount SSE responses, since call_next returns once headers are ready, well
+        # before the generator has produced any body chunks.
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        snap = obs.snapshot()
+        log.info(json.dumps({
+            "request_id": request_id,
+            "method": method,
+            "path": path,
+            "status_code": status_code,
+            "elapsed_ms": elapsed_ms,
+        }))
+        if path.startswith("/api"):
+            metrics.record({
+                "request_id": request_id,
+                "method": method,
+                "route": _route(),
+                "status_code": status_code,
+                "elapsed_ms": elapsed_ms,
+                "client_id": snap["extra"].get("client_id"),
+                "llm_calls": snap["llm_calls"],
+                "input_tokens": snap["input_tokens"],
+                "output_tokens": snap["output_tokens"],
+                "embed_tokens": snap["embed_tokens"],
+                "models": snap["models"],
+                "refused": snap["extra"].get("refused"),
+                "error": stream_error or snap["extra"].get("error"),
+            })
+
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        # Starlette wires a handler registered for the base `Exception` class (below) into
+        # ServerErrorMiddleware, which sits ABOVE this middleware in the stack — so call_next()
+        # still raises here even though the client will receive that handler's response (this
+        # only affects handlers on the base Exception class; HTTPException and other specific
+        # types are handled lower down and return through call_next normally). We can't see the
+        # real Response object in this branch, but Starlette always treats Exception-class
+        # handlers as 500s; record what we can here and re-raise so ServerErrorMiddleware still
+        # runs the handler and sends the response.
+        _finalize(500, str(exc))
+        raise
+
     response.headers["x-request-id"] = request_id
-    log.info(json.dumps({
-        "request_id": request_id,
-        "method": request.method,
-        "path": request.url.path,
-        "status_code": response.status_code,
-        "elapsed_ms": elapsed_ms,
-    }))
+
+    if hasattr(response, "body_iterator"):
+        original_iterator = response.body_iterator
+
+        async def _wrapped():
+            stream_error: str | None = None
+            try:
+                async for chunk in original_iterator:
+                    yield chunk
+            except Exception as exc:  # noqa: BLE001 — still finalize on a broken/aborted stream
+                stream_error = str(exc)
+                raise
+            finally:
+                _finalize(response.status_code, stream_error)
+
+        response.body_iterator = _wrapped()
+    else:
+        _finalize(response.status_code, None)
+
     return response
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    log.error("unhandled_exception", exc_info=exc)
+    return JSONResponse(status_code=500, content={"detail": "internal_error"})
 
 
 @app.get("/")
@@ -161,22 +230,48 @@ def chat(req: ChatRequest, request: Request, x_api_key: str | None = Header(defa
     prior_history = session.history(sid)
     conversation_context = from_history(prior_history)
     session.append(sid, "user", req.message)
+    obs.set_extra("client_id", req.client_id)
     if req.stream:
+        def on_done(payload: dict) -> None:
+            # The streaming path never used to persist the assistant turn or audit it — only
+            # the non-streaming branch below did. Wired here via research.stream_events's
+            # on_done hook, which fires once the full answer text is known.
+            session.append(sid, "assistant", payload["answer_text"],
+                            {"tool_calls": payload.get("tool_calls", [])})
+            obs.set_extra("refused", payload.get("refused", False))
+            audit.record({
+                "request_id": obs.get_request_id(),
+                "session_id": sid,
+                "client_id": req.client_id,
+                "question": req.message,
+                "contextualized_question": payload.get("contextualized_question"),
+                "citations": payload.get("citations", []),
+                "tool_calls": payload.get("tool_calls", []),
+                "refused": payload.get("refused", False),
+                "elapsed_ms": payload.get("elapsed_ms"),
+            })
+
         def events():
             yield research.sse("session", {"session_id": sid})
-            yield from research.stream_events(req.message, conversation_context, req.client_id)
+            yield from research.stream_events(
+                req.message, conversation_context, req.client_id, on_done=on_done,
+            )
         return StreamingResponse(events(), media_type="text/event-stream")
 
     result = research.run(req.message, conversation_context, req.client_id)
     result["session_id"] = sid
     session.append(sid, "assistant", result["answer"], {"tool_calls": result.get("tool_calls", [])})
+    obs.set_extra("refused", result.get("refused", False))
     audit.record({
+        "request_id": obs.get_request_id(),
         "session_id": sid,
+        "client_id": req.client_id,
         "question": req.message,
         "contextualized_question": result.get("contextualized_question"),
         "citations": result.get("citations", []),
         "tool_calls": result.get("tool_calls", []),
         "refused": result.get("refused", False),
+        "elapsed_ms": result.get("elapsed_ms"),
     })
     return result
 

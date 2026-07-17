@@ -16,7 +16,7 @@ import json
 
 import anthropic
 
-from app import config, universe
+from app import config, obs, universe
 from app.tools.registry import TOOL_REGISTRY, validate_args
 
 try:
@@ -154,6 +154,7 @@ def llm_route(question: str, route: dict) -> dict | None:
             messages=[{"role": "user", "content": f"Question: {question}"}],
             output_config={"format": {"type": "json_schema", "schema": _build_schema()}},
         )
+        obs.add_llm_usage(config.ROUTER_MODEL, msg.usage.input_tokens, msg.usage.output_tokens)
         text = next(b.text for b in msg.content if b.type == "text")
         raw = json.loads(text)
     except Exception:  # noqa: BLE001 - any router failure falls back to deterministic routing

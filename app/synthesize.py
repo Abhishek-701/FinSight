@@ -8,7 +8,7 @@ asked figure, the model says "not found for <company>" instead of guessing. Cita
 
 import anthropic
 
-from app import config
+from app import config, obs
 
 _client = anthropic.Anthropic()
 
@@ -261,6 +261,8 @@ def stream_answer(question: str, chunks: list[dict], guidance: str | None = None
     ) as stream:
         for text in stream.text_stream:
             yield text
+        final = stream.get_final_message()
+        obs.add_llm_usage(config.CHAT_MODEL, final.usage.input_tokens, final.usage.output_tokens)
 
 
 def stream_section(query: str, chunks: list[dict]):
@@ -287,6 +289,8 @@ def stream_section(query: str, chunks: list[dict]):
     ) as stream:
         for text in stream.text_stream:
             yield text
+        final = stream.get_final_message()
+        obs.add_llm_usage(config.CHAT_MODEL, final.usage.input_tokens, final.usage.output_tokens)
 
 
 def synthesize_section(query: str, chunks: list[dict]) -> str:

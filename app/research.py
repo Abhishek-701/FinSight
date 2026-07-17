@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from app import config, decompose, facts as facts_mod, retrieve, router, suggest, synthesize, universe
 from app.agent.context import ConversationContext, contextualize_question
@@ -583,9 +583,15 @@ def sse(event: str, data: dict) -> str:
 
 def stream_events(
     question: str, conversation_context: ConversationContext | None = None,
-    client_id: str | None = None,
+    client_id: str | None = None, on_done: Callable[[dict], None] | None = None,
 ):
-    """SSE generator: stream answer tokens, then a done event with metadata."""
+    """SSE generator: stream answer tokens, then a done event with metadata.
+
+    `on_done`, if given, is called once with the same dict passed to the final `sse("done", ...)`
+    event (plus an `answer_text` key with the full accumulated answer) just before that event is
+    yielded — lets the caller (app.main's streaming /api/chat path) persist the assistant message
+    and an audit record, which it could not do before since it never saw the finished answer.
+    """
     started = time.perf_counter()
     working_question, context_meta = contextualize_question(question, conversation_context)
     route = router.route(working_question)
@@ -645,7 +651,7 @@ def stream_events(
         context_chunks = list(all_chunks.values())
         reflection = reflect({"route": route}, text)
         citations_payload = _citation_payload(cited, context_chunks)
-        yield sse("done", {
+        done_payload = {
             "citations": citations_payload,
             "gaps": reflection["gaps"],
             "refused": False,
@@ -657,7 +663,10 @@ def stream_events(
             "conversation_context": context_meta,
             "suggestions": suggest.suggest(None, ticker, False, None),
             "elapsed_ms": _elapsed(started),
-        })
+        }
+        if on_done:
+            on_done({**done_payload, "answer_text": text})
+        yield sse("done", done_payload)
         return
 
     research_plan = plan(working_question, route)
@@ -677,15 +686,18 @@ def stream_events(
         reflection = reflect(meta, meta["answer"])
         suggestions = _suggestions_for(research_plan, route, True, meta.get("refusal_reason"))
         yield sse("token", {"text": meta["answer"]})
-        yield sse("done", {"citations": [], "gaps": [], "refused": True,
-                           "refusal_reason": meta["refusal_reason"],
-                           "action": meta.get("action"), "ticker": meta.get("ticker"),
-                           "plan": research_plan, "tool_calls": tool_calls,
-                           "reflection": reflection, "question": question,
-                           "contextualized_question": working_question,
-                           "conversation_context": context_meta,
-                           "suggestions": suggestions,
-                           "elapsed_ms": _elapsed(started)})
+        done_payload = {"citations": [], "gaps": [], "refused": True,
+                        "refusal_reason": meta["refusal_reason"],
+                        "action": meta.get("action"), "ticker": meta.get("ticker"),
+                        "plan": research_plan, "tool_calls": tool_calls,
+                        "reflection": reflection, "question": question,
+                        "contextualized_question": working_question,
+                        "conversation_context": context_meta,
+                        "suggestions": suggestions,
+                        "elapsed_ms": _elapsed(started)}
+        if on_done:
+            on_done({**done_payload, "answer_text": meta["answer"]})
+        yield sse("done", done_payload)
         return
 
     ctx = {c["chunk_id"]: c for c in meta["context_chunks"]}
@@ -714,10 +726,13 @@ def stream_events(
         "facts": ctx[cid].get("facts", []),
     } for cid in cited if cid in ctx]
     suggestions = _suggestions_for(research_plan, route, False, None)
-    yield sse("done", {"citations": citations, "gaps": reflection["gaps"], "refused": False,
-                       "plan": research_plan, "tool_calls": tool_calls,
-                       "reflection": reflection, "question": question,
-                       "contextualized_question": working_question,
-                       "conversation_context": context_meta,
-                       "suggestions": suggestions,
-                       "elapsed_ms": _elapsed(started)})
+    done_payload = {"citations": citations, "gaps": reflection["gaps"], "refused": False,
+                    "plan": research_plan, "tool_calls": tool_calls,
+                    "reflection": reflection, "question": question,
+                    "contextualized_question": working_question,
+                    "conversation_context": context_meta,
+                    "suggestions": suggestions,
+                    "elapsed_ms": _elapsed(started)}
+    if on_done:
+        on_done({**done_payload, "answer_text": text})
+    yield sse("done", done_payload)

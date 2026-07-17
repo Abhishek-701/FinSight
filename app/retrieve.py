@@ -12,7 +12,7 @@ import chromadb
 from openai import OpenAI
 from rank_bm25 import BM25Okapi
 
-from app import config
+from app import config, obs
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
@@ -64,6 +64,7 @@ def invalidate() -> None:
 @lru_cache(maxsize=256)
 def _embed_query(query: str) -> tuple[float, ...]:
     resp = OpenAI().embeddings.create(model=config.EMBED_MODEL, input=[query])
+    obs.add_embed_tokens(resp.usage.total_tokens)
     return tuple(resp.data[0].embedding)
 
 
