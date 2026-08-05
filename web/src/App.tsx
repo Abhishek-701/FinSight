@@ -17,7 +17,7 @@ import './App.css'
 
 function App() {
   const { sessionId, turns, isBusy, chatWindows, recentSearches, ask, newChat, switchChat } = useChat()
-  const { user, isAdmin, loading: authLoading, login, logout } = useAuth()
+  const { user, isAdmin, oauthConfigured, loading: authLoading, login, logout } = useAuth()
   const [companies, setCompanies] = useState<Record<string, string>>({})
   const [online, setOnline] = useState(true)
   const [view, setView] = useState<View>('chat')
@@ -107,12 +107,19 @@ function App() {
               <span className="dot" style={{ background: online ? undefined : '#c0392b' }} />
               {online ? 'Online' : 'Offline'}
             </div>
-            <UserMenu user={user} loading={authLoading} onLogin={login} onLogout={logout} />
+            <UserMenu
+              user={user}
+              loading={authLoading}
+              oauthConfigured={oauthConfigured}
+              onLogin={login}
+              onLogout={logout}
+            />
           </div>
         </header>
         {authError && (
           <div className="auth-error-banner">
-            Sign-in didn't complete. Please try again.
+            Google sign-in didn't complete — check that this site's URL is registered as an
+            authorized redirect URI, or try again.
             <button onClick={() => setAuthError(false)}>Dismiss</button>
           </div>
         )}

@@ -3,17 +3,20 @@ import type { AuthUser } from '../lib/types'
 export default function UserMenu({
   user,
   loading,
+  oauthConfigured,
   onLogin,
   onLogout,
 }: {
   user: AuthUser | null
   loading: boolean
+  oauthConfigured: boolean
   onLogin: () => void
   onLogout: () => void
 }) {
   if (loading) return null
 
   if (!user) {
+    if (!oauthConfigured) return null
     return (
       <button className="user-menu-login" onClick={onLogin}>
         Sign in with Google

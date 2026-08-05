@@ -26,6 +26,8 @@ Open the demo and ask things like:
 - *"Which of my holdings has the most rate exposure?"* — joins your holdings with filing evidence scoped to the companies you actually hold.
 - Follow-ups without a company name (*"and its net income?"*) resolve to the last company mentioned; a bare swap (*"What about AAPL?"*) carries over the prior question's intent (e.g. a valuation follow-up stays a valuation question) instead of losing it.
 
+Optional **Sign in with Google** moves your portfolio, watchlist, and chat onto a durable account (Supabase Postgres when `DATABASE_URL` is set). Anonymous use still works with a browser `client_id` — no account required.
+
 **Ask about a company that isn't loaded yet** — *"What was Tesla's revenue last year?"*, *"Is Palantir expensive right now?"*, *"What's Rivian's stock price?"* — chat resolves the ticker or company name against the full SEC EDGAR universe and, for a filing question, offers a **"+ Add TSLA"** button right in the reply; click it, watch a short progress bar (download → parse → index → done, under a minute), and the original question answers itself once it's ready. Market-only questions ("what's the stock price") work immediately, no add needed. You can also search any ticker or company name directly from the **"Add a Company"** box in the sidebar. Once added, a company is a full citizen of the corpus — same grounded Q&A, valuation, and insight briefs as the six seeds.
 
 The tool plan appears **as soon as it's decided** — before any tool has even run — and each step lights up live (running → done/error, with its latency) as the agent executes it; the answer streams in after. Every answer shows its **citations and tool trace**, including which router strategy answered it (`llm_router` for the valuation/explain-move/insight questions above, `deterministic` for everything else, including the newer portfolio/comparison intents — see [How it works](#how-it-works)), and ends with a row of clickable follow-up questions templated off the answer's intent. A company FinSight can't find on SEC EDGAR at all (or that has no 10-K on file) is refused rather than hallucinated.
@@ -34,7 +36,7 @@ Beyond chat, the sidebar has four more views:
 
 - **Screener** — derived XBRL metrics (margins, ROE, revenue growth, P/S) across the six seed companies, sortable, with live-price sparklines; each row has a one-click **Insight** action.
 - **Compare** — overlaid price history chart (hover crosshair) for any subset of the six seed tickers.
-- **Portfolio** — enter share counts (and an optional cost basis) per ticker (any ticker, not just the seeds); live valuation, weights, day change, unrealized P&L, and HHI concentration. A **What If** panel simulates a hypothetical trade (buy/sell/double/halve a holding) and shows before/after value and concentration without touching your real holdings, and a **vs S&P 500** chart compares your current holdings/weights against SPY over a chosen period. Stored per anonymous `client_id` in `localStorage` — no account needed. Same for the **watchlist** panel.
+- **Portfolio** — enter share counts (and an optional cost basis) per ticker (any ticker, not just the seeds); live valuation, weights, day change, unrealized P&L, and HHI concentration. A **What If** panel simulates a hypothetical trade (buy/sell/double/halve a holding) and shows before/after value and concentration without touching your real holdings, and a **vs S&P 500** chart compares your current holdings/weights against SPY over a chosen period. Stored server-side per anonymous `client_id` (or your Google account after sign-in). The watchlist panel works the same way.
 - **Insight** — pick a company for a one-page brief: live quote + sparkline, P/E/P/S/price-change tiles, a fundamentals row with peer-rank badges, and a streaming two-section filing narrative (business & outlook, key risks), all with sources. Works for any added company, not just the seeds.
 
 ## How it works
@@ -85,7 +87,24 @@ Optional:
 - `FINSIGHT_USE_RERANKER` — set to `0` to skip the cross-encoder reranker (default `1` locally, `0` in the deploy image; see [Deploy](#deploy))
 - `FINSIGHT_USE_LLM_ROUTER` — set to `0` to force the deterministic-only tool router (default `1`)
 - `FINSIGHT_ROUTER_MODEL` — model for the hybrid tool router (default `claude-haiku-4-5`)
-- `DATABASE_URL` — a `postgresql://` URL switches sessions/portfolio/watchlist (`app/storage.py`) from the sqlite default to Postgres; unset (the default) keeps everything on sqlite exactly as before. The filing corpus (chunks/facts/Chroma) is unaffected either way. Verified live against a throwaway Postgres container (session ordering, watchlist dedupe, portfolio upsert + the `cost_basis` migration, and `whatif()`) via a one-off manual script, not the pytest suite — the existing tests isolate each test with a fresh sqlite file per test (`setUp`), which doesn't carry over to a shared Postgres instance without added per-test cleanup this phase didn't build. The sqlite path is what the automated suite (`tests/`) actually exercises.
+- `DATABASE_URL` — a `postgresql://` URI (e.g. Supabase Postgres) switches sessions/portfolio/watchlist/users (`app/storage.py`) from the sqlite default to Postgres; unset keeps everything on sqlite. The filing corpus (chunks/facts/Chroma) is unaffected. Prefer Supabase's pooled connection string when available. Verified live against Postgres for session ordering, watchlist dedupe, portfolio upsert + the `cost_basis` migration, and `whatif()`; the automated suite (`tests/`) still uses a fresh sqlite file per test.
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — optional Google OAuth; without them the app is anonymous-only and Sign-in is hidden
+- `FINSIGHT_BASE_URL` — public origin for the OAuth redirect URI (default `http://localhost:8000`; production must match the live site URL)
+- `FINSIGHT_COOKIE_SECURE` — set `1` on HTTPS so session cookies are Secure
+- `FINSIGHT_ADMIN_EMAILS` — comma-separated emails allowed to open the admin dashboard after sign-in
+
+### Auth & persistence
+
+Login is optional. Anonymous visitors get a UUID in `localStorage` (`finsight_client_id`); portfolio, watchlist, and chat are keyed by that id on the server. With Google OAuth configured, **Sign in with Google** creates a user row and a httponly session cookie; on first login the SPA claims the anonymous `client_id` so existing holdings/chat move onto the account.
+
+For data that survives Render redeploys, set `DATABASE_URL` to a **Supabase** (or any) Postgres URI. Schema is created automatically on first connect (`CREATE TABLE IF NOT EXISTS`). Without `DATABASE_URL`, sqlite under `data/sessions.sqlite3` is used (fine locally; ephemeral on Render's free disk).
+
+**Google Cloud setup:** create an OAuth 2.0 Web client and add authorized redirect URIs for each environment:
+
+- Local: `http://localhost:8000/api/auth/google/callback`
+- Production: `{FINSIGHT_BASE_URL}/api/auth/google/callback` (e.g. `https://finsight-vh4y.onrender.com/api/auth/google/callback`)
+
+`FINSIGHT_BASE_URL` must match the origin users actually hit (no trailing slash).
 
 ### Setup
 
@@ -163,7 +182,7 @@ Backend alone at http://127.0.0.1:8000 serves the legacy UI. `npm run build` (fr
 | `/api/corpus/status` | GET | Corpus/store health |
 | `/health` | GET | Health check |
 
-Watchlist and portfolio are keyed by an anonymous `client_id` (a UUID the frontend generates and stores in `localStorage`) — no accounts required.
+Watchlist and portfolio are keyed by an anonymous `client_id` (a UUID the frontend generates and stores in `localStorage`) or, after Google sign-in, by the authenticated user's id. Auth routes: `GET /api/auth/google/login`, `GET /api/auth/google/callback`, `GET /api/auth/me` (includes `oauth_configured`), `POST /api/auth/logout`, `POST /api/auth/claim`.
 
 ## Evaluate
 
@@ -185,12 +204,12 @@ One Docker service: a multi-stage build compiles the React SPA (Node stage) and 
 Deployed on [Render](https://render.com)'s free tier via `render.yaml`:
 
 1. Connect the GitHub repo in the Render dashboard → New → Blueprint.
-2. Set `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` as secrets when prompted (they're marked `sync: false` in `render.yaml`, so Render asks for them rather than reading them from the repo).
+2. Set secrets when prompted (`sync: false` in `render.yaml`): `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and for durable accounts + login: `DATABASE_URL` (Supabase Postgres URI), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FINSIGHT_BASE_URL` (this service's public HTTPS URL), and optionally `FINSIGHT_ADMIN_EMAILS`. `FINSIGHT_COOKIE_SECURE` is already set to `1` in the blueprint.
 3. Push to `master` — Render builds the Dockerfile and deploys automatically on every push.
 
-The reranker is off in deploy (`FINSIGHT_USE_RERANKER=0`, baked into the Dockerfile) since `sentence-transformers`/`torch` would exceed the free tier's 512MB RAM. The vector store and chunk/fact stores for the six seed companies are committed to the repo so the image builds directly from git with no re-ingest or re-embedding step. The watchlist/portfolio/session SQLite database and any on-demand-added companies (`data/dynamic/`, gitignored) live on ephemeral disk and reset on redeploy; the frontend mirrors tickers and share counts in `localStorage` and re-syncs them on load, so a user's watchlist/portfolio *selections* survive a redeploy even though the server-side rows — and any added companies' filing data — do not. Re-adding a company after a redeploy is the same ~1-minute flow as adding it the first time.
+The reranker is off in deploy (`FINSIGHT_USE_RERANKER=0`, baked into the Dockerfile) since `sentence-transformers`/`torch` would exceed the free tier's 512MB RAM. The vector store and chunk/fact stores for the six seed companies are committed to the repo so the image builds directly from git with no re-ingest or re-embedding step. On-demand-added companies (`data/dynamic/`, gitignored) live on ephemeral disk and reset on redeploy — re-adding a company after a redeploy is the same ~1-minute flow as adding it the first time.
 
-**Optional Postgres.** Setting `DATABASE_URL` (e.g. to Render's own free Postgres add-on — note its 90-day expiry on the free tier) moves sessions/portfolio/watchlist off the ephemeral disk so they survive a redeploy; the filing corpus still ships in the image either way. This isn't wired into `render.yaml` by default — it's opt-in, not required for the demo to work.
+**Durable user data (V7).** Set `DATABASE_URL` to your Supabase Postgres connection string so users, sessions, portfolio, watchlist, chat messages, audit, and metrics survive redeploys. Without it, those tables use sqlite on ephemeral disk and reset on every deploy. The filing corpus still ships in the image either way.
 
 ## Repo layout
 

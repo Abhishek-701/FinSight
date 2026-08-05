@@ -8,6 +8,7 @@ const CLAIM_ATTEMPTED_KEY = 'finsight_claim_attempted'
 export function useAuth() {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [oauthConfigured, setOauthConfigured] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -17,6 +18,7 @@ export function useAuth() {
         if (cancelled) return
         setUser(me.user)
         setIsAdmin(me.is_admin)
+        setOauthConfigured(me.oauth_configured)
         // Anonymous localStorage data (portfolio/watchlist/chat history) follows the user into
         // their account exactly once, right after their first login — guarded both here (only
         // try once per browser) and server-side (users.claimed_client_id, 409 on repeat).
@@ -35,6 +37,7 @@ export function useAuth() {
         if (!cancelled) {
           setUser(null)
           setIsAdmin(false)
+          setOauthConfigured(false)
         }
       })
       .finally(() => {
@@ -46,8 +49,9 @@ export function useAuth() {
   }, [])
 
   const login = useCallback(() => {
+    if (!oauthConfigured) return
     window.location.href = '/api/auth/google/login'
-  }, [])
+  }, [oauthConfigured])
 
   const logout = useCallback(async () => {
     await apiLogout()
@@ -56,5 +60,5 @@ export function useAuth() {
     setIsAdmin(false)
   }, [])
 
-  return { user, isAdmin, loading, login, logout }
+  return { user, isAdmin, oauthConfigured, loading, login, logout }
 }

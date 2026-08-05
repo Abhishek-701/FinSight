@@ -1,10 +1,6 @@
-databases:
-  - name: finsight-db
-    plan: free
-    # Render free Postgres expires 90 days after creation. When it does, /health's
-    # `database.ok` flips to false — recreate the database and it re-links via
-    # `fromDatabase` below (no code change needed, but session/portfolio/watchlist data
-    # in the old database is gone).
+# V7: user data (users, sessions, portfolio, watchlist, chat, audit, metrics) lives in
+# Supabase Postgres via DATABASE_URL. Set the secret in the Render dashboard to your
+# Supabase connection string (pooled URI preferred). Filing corpus / Chroma stay in the image.
 
 services:
   - type: web
@@ -21,11 +17,10 @@ services:
         value: "0"
       - key: FINSIGHT_RATE_LIMIT_PER_MINUTE
         value: "30"
+      # Supabase Postgres URI — durable across Render redeploys (replaces free-tier Render Postgres).
       - key: DATABASE_URL
-        fromDatabase:
-          name: finsight-db
-          property: connectionString
-      # V6.3 Google OAuth — login is optional/additive; unset, the app runs anonymous-only.
+        sync: false
+      # Google OAuth — login is optional/additive; unset, the app runs anonymous-only.
       # FINSIGHT_BASE_URL must match this service's real URL (known only after first deploy)
       # and must be registered as an authorized redirect URI (BASE_URL + /api/auth/google/callback)
       # in the Google Cloud OAuth client console.

@@ -307,6 +307,12 @@ def get_session(session_id: str, request: Request, client_id: str | None = None,
 # don't send one today (me/logout/claim — same as every other frontend call), matching the
 # existing no-guard precedent for GET /api/companies. Login is entirely optional/additive; if
 # GOOGLE_CLIENT_ID/SECRET aren't set, login/callback 404 and the app works anonymously.
+# V7: delete_cookie must mirror set_cookie's secure/samesite or browsers keep Secure cookies
+# after logout on HTTPS; /api/auth/me exposes oauth_configured so the SPA can hide Sign-in.
+def _clear_cookie(resp, name: str) -> None:
+    resp.delete_cookie(name, secure=config.COOKIE_SECURE, samesite="lax")
+
+
 @app.get("/api/auth/google/login")
 def auth_login():
     if not auth.is_configured():
@@ -323,7 +329,7 @@ def auth_callback(request: Request, code: str | None = None, state: str | None =
     expected_state = request.cookies.get(auth.STATE_COOKIE)
     if not auth.is_configured() or not code or not state or state != expected_state:
         resp = RedirectResponse("/?auth_error=1")
-        resp.delete_cookie(auth.STATE_COOKIE)
+        _clear_cookie(resp, auth.STATE_COOKIE)
         return resp
     try:
         token_response = auth.exchange_code(code)
@@ -331,11 +337,11 @@ def auth_callback(request: Request, code: str | None = None, state: str | None =
         user = auth.upsert_user(userinfo)
     except Exception:  # noqa: BLE001 — any OAuth-flow failure lands on the same error redirect
         resp = RedirectResponse("/?auth_error=1")
-        resp.delete_cookie(auth.STATE_COOKIE)
+        _clear_cookie(resp, auth.STATE_COOKIE)
         return resp
     session_token = auth.create_session(user["id"])
     resp = RedirectResponse("/")
-    resp.delete_cookie(auth.STATE_COOKIE)
+    _clear_cookie(resp, auth.STATE_COOKIE)
     resp.set_cookie(auth.SESSION_COOKIE, session_token, max_age=60 * 60 * 24 * 30,
                      httponly=True, secure=config.COOKIE_SECURE, samesite="lax")
     return resp
@@ -351,9 +357,14 @@ def _user_payload(user: dict) -> dict:
 @app.get("/api/auth/me")
 def auth_me(request: Request):
     user = auth.current_user(request)
+    configured = auth.is_configured()
     if user is None:
-        return {"user": None, "is_admin": False}
-    return {"user": _user_payload(user), "is_admin": auth.is_admin(user)}
+        return {"user": None, "is_admin": False, "oauth_configured": configured}
+    return {
+        "user": _user_payload(user),
+        "is_admin": auth.is_admin(user),
+        "oauth_configured": configured,
+    }
 
 
 @app.post("/api/auth/logout")
@@ -362,7 +373,7 @@ def auth_logout(request: Request):
     if token:
         auth.revoke_session(token)
     resp = JSONResponse({"ok": True})
-    resp.delete_cookie(auth.SESSION_COOKIE)
+    _clear_cookie(resp, auth.SESSION_COOKIE)
     return resp
 
 

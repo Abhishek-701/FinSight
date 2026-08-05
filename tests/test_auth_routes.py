@@ -78,11 +78,20 @@ class AuthRouteTests(unittest.TestCase):
         self.assertIsNotNone(me["user"])
         self.assertEqual(me["user"]["email"], "me@example.com")
         self.assertFalse(me["user"]["claimed"])
+        self.assertTrue(me["oauth_configured"])
 
     def test_me_reports_anonymous_when_no_cookie(self):
         me = client.get("/api/auth/me").json()
         self.assertIsNone(me["user"])
         self.assertFalse(me["is_admin"])
+        self.assertTrue(me["oauth_configured"])
+
+    def test_me_reports_oauth_configured_false_when_unset(self):
+        config.GOOGLE_CLIENT_ID = ""
+        config.GOOGLE_CLIENT_SECRET = ""
+        me = client.get("/api/auth/me").json()
+        self.assertIsNone(me["user"])
+        self.assertFalse(me["oauth_configured"])
 
     def test_logout_revokes_session(self):
         token = _login()
@@ -90,6 +99,47 @@ class AuthRouteTests(unittest.TestCase):
         client.post("/api/auth/logout")
         me = client.get("/api/auth/me").json()
         self.assertIsNone(me["user"])
+
+    def test_logout_clears_cookie_with_secure_samesite_parity(self):
+        """delete_cookie must mirror set_cookie's Secure/SameSite or browsers keep the
+        session cookie after logout on HTTPS (V7)."""
+        token = _login()
+        client.cookies.set(auth_module.SESSION_COOKIE, token)
+        orig_secure = config.COOKIE_SECURE
+        try:
+            config.COOKIE_SECURE = True
+            resp = client.post("/api/auth/logout")
+        finally:
+            config.COOKIE_SECURE = orig_secure
+        self.assertEqual(resp.status_code, 200)
+        # Starlette emits Set-Cookie with Max-Age=0 (or expires) to clear; attributes must
+        # include Secure and SameSite=lax when COOKIE_SECURE is on.
+        set_cookies = resp.headers.get_list("set-cookie")
+        session_clears = [c for c in set_cookies if c.startswith(f"{auth_module.SESSION_COOKIE}=")]
+        self.assertTrue(session_clears, f"expected clear Set-Cookie for session; got {set_cookies}")
+        clear_header = session_clears[0].lower()
+        self.assertIn("secure", clear_header)
+        self.assertIn("samesite=lax", clear_header)
+
+    def test_callback_error_clears_state_cookie_with_samesite(self):
+        orig_secure = config.COOKIE_SECURE
+        try:
+            config.COOKIE_SECURE = True
+            client.get("/api/auth/google/login", follow_redirects=False)
+            resp = client.get(
+                "/api/auth/google/callback",
+                params={"code": "x", "state": "wrong-state"},
+                follow_redirects=False,
+            )
+        finally:
+            config.COOKIE_SECURE = orig_secure
+        self.assertIn("auth_error=1", resp.headers["location"])
+        set_cookies = resp.headers.get_list("set-cookie")
+        state_clears = [c for c in set_cookies if c.startswith(f"{auth_module.STATE_COOKIE}=")]
+        self.assertTrue(state_clears, f"expected clear Set-Cookie for state; got {set_cookies}")
+        clear_header = state_clears[0].lower()
+        self.assertIn("secure", clear_header)
+        self.assertIn("samesite=lax", clear_header)
 
     def test_claim_requires_login(self):
         resp = client.post("/api/auth/claim", json={"client_id": "anon-1"})

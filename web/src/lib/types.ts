@@ -283,6 +283,7 @@ export interface AuthUser {
 export interface MeResponse {
   user: AuthUser | null
   is_admin: boolean
+  oauth_configured: boolean
 }
 
 export interface AdminDayCount {
