@@ -62,6 +62,7 @@ button:disabled { opacity: 0.55; cursor: default; }
 .user-menu-login { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 14px; font-size: 12px; font-weight: 700; color: var(--ink); cursor: pointer; }
 .user-menu-login:hover { border-color: var(--green); color: var(--green-dark); }
 .user-menu { display: flex; align-items: center; gap: 8px; }
+.user-menu-guest-chip { font-size: 11px; font-weight: 700; color: var(--muted); background: #f3f1ec; border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; letter-spacing: 0.02em; }
 .user-menu-avatar { width: 26px; height: 26px; border-radius: 999px; object-fit: cover; }
 .user-menu-avatar-fallback { display: grid; place-items: center; background: var(--green); color: #fff; font-weight: 700; font-size: 12px; }
 .user-menu-name { font-size: 12px; font-weight: 600; color: var(--ink); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -69,6 +70,10 @@ button:disabled { opacity: 0.55; cursor: default; }
 .user-menu-logout:hover { color: var(--red); }
 .auth-error-banner { background: #fdecea; color: var(--red); border: 1px solid #f5c6c0; border-radius: 10px; padding: 8px 14px; font-size: 12px; margin: 0 28px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .auth-error-banner button { border: 0; background: transparent; color: var(--red); font-weight: 700; cursor: pointer; }
+.save-prompt-banner { background: #eef8f1; color: var(--green-dark); border: 1px solid #cfe9d8; border-radius: 10px; padding: 8px 14px; font-size: 12px; margin: 0 28px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.save-prompt-banner-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.save-prompt-banner-actions .save-prompt-signin { border: 0; background: transparent; color: var(--green-dark); font-weight: 700; cursor: pointer; }
+.save-prompt-banner-actions .save-prompt-dismiss { border: 0; background: transparent; color: var(--muted); font-weight: 700; cursor: pointer; }
 .workspace { flex: 1; padding: 22px 28px 150px; overflow: auto; }
 .thread { max-width: 860px; margin: 0 auto; display: grid; gap: 18px; }
 .user-query { justify-self: end; max-width: 520px; padding: 13px 16px; border-radius: 18px 18px 4px 18px; background: #fff; border: 1px solid var(--line); }

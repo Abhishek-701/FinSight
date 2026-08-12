@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getSession, streamChat } from '../lib/api'
+import { getSession, listSessions, streamChat } from '../lib/api'
 import { getClientId } from '../lib/clientId'
 import { titleFromQuestion } from '../lib/format'
 import type { CitationDetail, LiveToolCall, PlanSummary, ToolCallSummary } from '../lib/types'
@@ -25,10 +25,9 @@ export interface ChatWindow {
 
 const SESSION_KEY = 'finsight_session_id'
 const WINDOWS_KEY = 'finsight_chat_windows'
-const RECENT_KEY = 'finsight_recent_searches'
 const TURNS_KEY = 'finsight_local_turns'
 
-const DEFAULT_PROMPTS = [
+export const DEFAULT_PROMPTS = [
   "What is NVIDIA's current stock price and latest reported revenue?",
   "Compare Apple's current market cap to its latest reported revenue.",
   'What cybersecurity risks did Walmart disclose?',
@@ -44,14 +43,19 @@ function loadJson<T>(key: string, fallback: T): T {
   }
 }
 
-export function useChat() {
+export function useChat({
+  signedIn,
+  recentSearches,
+  onRecentSearches,
+}: {
+  signedIn: boolean
+  recentSearches: string[]
+  onRecentSearches: (next: string[]) => void
+}) {
   const [sessionId, setSessionId] = useState<string | null>(() => localStorage.getItem(SESSION_KEY))
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [isBusy, setIsBusy] = useState(false)
   const [chatWindows, setChatWindows] = useState<ChatWindow[]>(() => loadJson(WINDOWS_KEY, []))
-  const [recentSearches, setRecentSearches] = useState<string[]>(() =>
-    loadJson(RECENT_KEY, DEFAULT_PROMPTS.slice(0, 3))
-  )
   const localTurnsRef = useRef<Record<string, ChatTurn[]>>(loadJson(TURNS_KEY, {}))
 
   const persistWindows = useCallback((windows: ChatWindow[]) => {
@@ -82,12 +86,9 @@ export function useChat() {
   )
 
   const updateRecent = useCallback((question: string) => {
-    setRecentSearches((prev) => {
-      const next = [question, ...prev.filter((q) => q !== question)].slice(0, 8)
-      localStorage.setItem(RECENT_KEY, JSON.stringify(next))
-      return next
-    })
-  }, [])
+    const next = [question, ...recentSearches.filter((q) => q !== question)].slice(0, 8)
+    onRecentSearches(next)
+  }, [recentSearches, onRecentSearches])
 
   const ask = useCallback(
     async (question: string) => {
@@ -228,6 +229,26 @@ export function useChat() {
   useEffect(() => {
     persistWindows(chatWindows)
   }, [chatWindows, persistWindows])
+
+  useEffect(() => {
+    if (!signedIn) return
+    let cancelled = false
+    listSessions(getClientId())
+      .then((res) => {
+        if (cancelled) return
+        setChatWindows(
+          res.sessions.map((s) => ({
+            id: s.session_id,
+            title: titleFromQuestion(s.title),
+            updated_at: s.updated_at,
+          }))
+        )
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [signedIn])
 
   return { sessionId, turns, isBusy, chatWindows, recentSearches, ask, newChat, switchChat }
 }

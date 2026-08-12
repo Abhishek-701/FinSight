@@ -15,6 +15,7 @@ that never logs in is unaffected by any of this module.
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -38,18 +39,25 @@ def _now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
+_PREF_KEYS = ("last_view", "last_insight_ticker", "compare_tickers", "recent_searches")
+
+
 def _init_schema(conn: storage._TranslatingConnection) -> None:
     conn.execute(
         "CREATE TABLE IF NOT EXISTS users ("
         "id TEXT PRIMARY KEY, google_sub TEXT NOT NULL UNIQUE, email TEXT NOT NULL, "
         "name TEXT, picture TEXT, claimed_client_id TEXT, "
-        "created_at TEXT NOT NULL, last_login_at TEXT NOT NULL)"
+        "created_at TEXT NOT NULL, last_login_at TEXT NOT NULL, preferences TEXT)"
     )
     conn.execute(
         "CREATE TABLE IF NOT EXISTS auth_sessions ("
         "token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, "
         "created_at TEXT NOT NULL, expires_at TEXT NOT NULL)"
     )
+    if storage.is_postgres():
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences TEXT")
+    elif "preferences" not in storage.sqlite_columns(conn, "users"):
+        conn.execute("ALTER TABLE users ADD COLUMN preferences TEXT")
 
 
 def _connect() -> storage._TranslatingConnection:
@@ -108,11 +116,26 @@ def fetch_userinfo(access_token: str) -> dict:
     return resp.json()
 
 
+def _parse_preferences(raw) -> dict:
+    if not raw:
+        return {}
+    try:
+        val = json.loads(raw) if isinstance(raw, str) else raw
+    except json.JSONDecodeError:
+        return {}
+    return val if isinstance(val, dict) else {}
+
+
+def _clean_preferences(raw: dict) -> dict:
+    return {k: raw[k] for k in _PREF_KEYS if k in raw}
+
+
 def _row_to_user(row: tuple) -> dict:
-    uid, email, name, picture, claimed_client_id = row
+    uid, email, name, picture, claimed_client_id, preferences = row
     return {
         "id": uid, "email": email, "name": name, "picture": picture,
         "claimed_client_id": claimed_client_id,
+        "preferences": _parse_preferences(preferences),
     }
 
 
@@ -120,12 +143,30 @@ def get_user(user_id: str) -> dict | None:
     conn = _connect()
     try:
         row = conn.execute(
-            "SELECT id, email, name, picture, claimed_client_id FROM users WHERE id = ?",
+            "SELECT id, email, name, picture, claimed_client_id, preferences FROM users WHERE id = ?",
             (user_id,),
         ).fetchone()
     finally:
         conn.close()
     return _row_to_user(row) if row else None
+
+
+def set_preferences(user_id: str, prefs: dict) -> dict:
+    """Replace the user's preferences JSON blob. Unknown keys are dropped."""
+    cleaned = _clean_preferences(prefs)
+    conn = _connect()
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE users SET preferences = ? WHERE id = ?",
+                (json.dumps(cleaned), user_id),
+            )
+    finally:
+        conn.close()
+    user = get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="user_not_found")
+    return user
 
 
 def upsert_user(info: dict) -> dict:

@@ -73,6 +73,10 @@ class ClaimRequest(BaseModel):
     client_id: str
 
 
+class PreferencesRequest(BaseModel):
+    preferences: dict
+
+
 def _guard(request: Request, x_api_key: str | None = Header(default=None)) -> None:
     if config.API_KEY and x_api_key != config.API_KEY:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
@@ -291,6 +295,16 @@ def chat(req: ChatRequest, request: Request, x_api_key: str | None = Header(defa
     return result
 
 
+@app.get("/api/sessions")
+def list_sessions(request: Request, client_id: str | None = None,
+                  x_api_key: str | None = Header(default=None)):
+    _guard(request, x_api_key)
+    resolved = auth.resolve_client_id(request, client_id)
+    if not resolved:
+        return {"sessions": []}
+    return {"sessions": session.list_for_client(resolved)}
+
+
 @app.get("/api/sessions/{session_id}")
 def get_session(session_id: str, request: Request, client_id: str | None = None,
                 x_api_key: str | None = Header(default=None)):
@@ -351,6 +365,7 @@ def _user_payload(user: dict) -> dict:
     return {
         "id": user["id"], "email": user["email"], "name": user["name"],
         "picture": user["picture"], "claimed": user["claimed_client_id"] is not None,
+        "preferences": user.get("preferences") or {},
     }
 
 
@@ -381,6 +396,13 @@ def auth_logout(request: Request):
 def auth_claim(req: ClaimRequest, request: Request):
     user = auth.require_user(request)
     updated = auth.claim(user, req.client_id)
+    return {"user": _user_payload(updated)}
+
+
+@app.put("/api/auth/preferences")
+def auth_preferences(req: PreferencesRequest, request: Request):
+    user = auth.require_user(request)
+    updated = auth.set_preferences(user["id"], req.preferences)
     return {"user": _user_payload(updated)}
 
 

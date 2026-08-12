@@ -185,6 +185,48 @@ class SessionOwnershipTests(unittest.TestCase):
         session.append("sess-a", "user", "hi", client_id="client-a")
         self.assertEqual(session.owner("sess-a"), "client-a")
 
+    def test_list_for_client_returns_only_that_identity(self):
+        session.append("sess-a", "user", "Apple revenue?", client_id="client-a")
+        session.append("sess-a", "assistant", "answer", client_id="client-a")
+        session.append("sess-b", "user", "NVIDIA risks?", client_id="client-b")
+        mine = session.list_for_client("client-a")
+        self.assertEqual(len(mine), 1)
+        self.assertEqual(mine[0]["session_id"], "sess-a")
+        self.assertEqual(mine[0]["title"], "Apple revenue?")
+        self.assertEqual(session.list_for_client("client-b")[0]["session_id"], "sess-b")
+        self.assertEqual(session.list_for_client("nobody"), [])
+
+
+class PreferencesStoreTests(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._orig_path = config.SESSION_DB_PATH
+        config.SESSION_DB_PATH = Path(self._tmpdir.name) / "test_prefs.sqlite3"
+
+    def tearDown(self):
+        config.SESSION_DB_PATH = self._orig_path
+        self._tmpdir.cleanup()
+
+    def test_new_user_has_empty_preferences(self):
+        user = auth.upsert_user({"sub": "sub-1", "email": "a@example.com"})
+        self.assertEqual(user["preferences"], {})
+
+    def test_set_preferences_roundtrip_drops_unknown_keys(self):
+        user = auth.upsert_user({"sub": "sub-1", "email": "a@example.com"})
+        updated = auth.set_preferences(user["id"], {
+            "last_view": "portfolio",
+            "last_insight_ticker": "AAPL",
+            "compare_tickers": ["AAPL", "NVDA"],
+            "recent_searches": ["how is AAPL"],
+            "secret": "nope",
+        })
+        self.assertEqual(updated["preferences"]["last_view"], "portfolio")
+        self.assertEqual(updated["preferences"]["last_insight_ticker"], "AAPL")
+        self.assertEqual(updated["preferences"]["compare_tickers"], ["AAPL", "NVDA"])
+        self.assertNotIn("secret", updated["preferences"])
+        again = auth.get_user(user["id"])
+        self.assertEqual(again["preferences"]["last_view"], "portfolio")
+
 
 if __name__ == "__main__":
     unittest.main()

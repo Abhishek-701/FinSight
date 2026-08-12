@@ -272,12 +272,20 @@ export interface InsightBrief extends InsightCardData {
   elapsed_ms: number
 }
 
+export interface UserPreferences {
+  last_view?: View
+  last_insight_ticker?: string | null
+  compare_tickers?: string[]
+  recent_searches?: string[]
+}
+
 export interface AuthUser {
   id: string
   email: string
   name: string | null
   picture: string | null
   claimed: boolean
+  preferences: UserPreferences
 }
 
 export interface MeResponse {

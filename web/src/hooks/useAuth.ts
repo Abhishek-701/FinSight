@@ -16,7 +16,7 @@ export function useAuth() {
     getMe()
       .then(async (me) => {
         if (cancelled) return
-        setUser(me.user)
+        setUser(me.user ? { ...me.user, preferences: me.user.preferences || {} } : null)
         setIsAdmin(me.is_admin)
         setOauthConfigured(me.oauth_configured)
         // Anonymous localStorage data (portfolio/watchlist/chat history) follows the user into

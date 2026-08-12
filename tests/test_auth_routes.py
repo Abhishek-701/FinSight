@@ -78,6 +78,7 @@ class AuthRouteTests(unittest.TestCase):
         self.assertIsNotNone(me["user"])
         self.assertEqual(me["user"]["email"], "me@example.com")
         self.assertFalse(me["user"]["claimed"])
+        self.assertEqual(me["user"]["preferences"], {})
         self.assertTrue(me["oauth_configured"])
 
     def test_me_reports_anonymous_when_no_cookie(self):
@@ -165,6 +166,29 @@ class AuthRouteTests(unittest.TestCase):
         # redirected at another identity via the query string either.
         self.assertEqual(victim_items, [])
 
+    def test_preferences_requires_login(self):
+        resp = client.put("/api/auth/preferences", json={"preferences": {"last_view": "chat"}})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_preferences_roundtrip_via_me(self):
+        token = _login(email="prefs@example.com", sub="sub-prefs")
+        client.cookies.set(auth_module.SESSION_COOKIE, token)
+        resp = client.put("/api/auth/preferences", json={
+            "preferences": {
+                "last_view": "screener",
+                "last_insight_ticker": "NVDA",
+                "compare_tickers": ["NVDA", "AAPL"],
+                "recent_searches": ["NVIDIA valuation"],
+            },
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["user"]["preferences"]["last_view"], "screener")
+        me = client.get("/api/auth/me").json()
+        self.assertEqual(me["user"]["preferences"]["last_view"], "screener")
+        self.assertEqual(me["user"]["preferences"]["last_insight_ticker"], "NVDA")
+        self.assertEqual(me["user"]["preferences"]["compare_tickers"], ["NVDA", "AAPL"])
+        self.assertEqual(me["user"]["preferences"]["recent_searches"], ["NVIDIA valuation"])
+
 
 class ResolveClientIdEndpointTests(unittest.TestCase):
     """Confirms auth.resolve_client_id is actually wired into the client_id-scoped endpoints,
@@ -215,6 +239,23 @@ class ResolveClientIdEndpointTests(unittest.TestCase):
             "/api/watchlist?client_id=someone-elses-anon-uuid"
         ).json()["items"]
         self.assertEqual(truly_anon_items, [])
+
+    def test_authenticated_list_sessions_ignores_supplied_client_id(self):
+        token = _login(email="lister@example.com", sub="sub-lister")
+        client.cookies.set(auth_module.SESSION_COOKIE, token)
+        with patch("app.main.research.run", return_value={
+            "answer": "hi", "citations": [], "tool_calls": [], "refused": False,
+            "elapsed_ms": 1, "contextualized_question": "hi",
+        }):
+            client.post("/api/chat", json={
+                "message": "my portfolio", "client_id": "ignored-anon", "stream": False,
+            })
+        listed = client.get("/api/sessions", params={"client_id": "ignored-anon"}).json()["sessions"]
+        self.assertEqual(len(listed), 1)
+        self.assertEqual(listed[0]["title"], "my portfolio")
+        client.cookies.clear()
+        anon = client.get("/api/sessions", params={"client_id": "ignored-anon"}).json()["sessions"]
+        self.assertEqual(anon, [])
 
     def test_anonymous_watchlist_write_still_uses_supplied_client_id(self):
         resp = client.post("/api/watchlist", json={"client_id": "anon-plain", "ticker": "KO"})
@@ -276,6 +317,26 @@ class SessionOwnershipEndpointTests(unittest.TestCase):
         session_store.append(sid, "user", "old message")  # no client_id — legacy shape
         resp = client.get(f"/api/sessions/{sid}")
         self.assertEqual(resp.status_code, 200)
+
+    def test_list_sessions_returns_only_resolved_identity(self):
+        with patch("app.main.research.run", return_value={
+            "answer": "hi", "citations": [], "tool_calls": [], "refused": False,
+            "elapsed_ms": 1, "contextualized_question": "hi",
+        }):
+            client.post("/api/chat", json={
+                "message": "Apple revenue?", "client_id": "client-a", "stream": False,
+            })
+            client.post("/api/chat", json={
+                "message": "NVIDIA risks?", "client_id": "client-b", "stream": False,
+            })
+        own = client.get("/api/sessions", params={"client_id": "client-a"}).json()["sessions"]
+        self.assertEqual(len(own), 1)
+        self.assertEqual(own[0]["title"], "Apple revenue?")
+        other = client.get("/api/sessions", params={"client_id": "client-b"}).json()["sessions"]
+        self.assertEqual(len(other), 1)
+        self.assertEqual(other[0]["title"], "NVIDIA risks?")
+        empty = client.get("/api/sessions", params={"client_id": "client-c"}).json()["sessions"]
+        self.assertEqual(empty, [])
 
 
 if __name__ == "__main__":

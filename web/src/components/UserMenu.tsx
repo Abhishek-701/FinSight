@@ -18,9 +18,12 @@ export default function UserMenu({
   if (!user) {
     if (!oauthConfigured) return null
     return (
-      <button className="user-menu-login" onClick={onLogin}>
-        Sign in with Google
-      </button>
+      <div className="user-menu">
+        <span className="user-menu-guest-chip">Guest</span>
+        <button className="user-menu-login" onClick={onLogin}>
+          Sign in with Google
+        </button>
+      </div>
     )
   }
 

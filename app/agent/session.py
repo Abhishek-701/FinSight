@@ -78,6 +78,28 @@ def owner(session_id: str) -> str | None:
     return row[0] if row else None
 
 
+def list_for_client(client_id: str, limit: int = 12) -> list[dict]:
+    """Sidebar chat windows for one identity: session_id, title (first user message), updated_at."""
+    order_col = "id" if storage.is_postgres() else "rowid"
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            f"SELECT session_id, "
+            f"(SELECT content FROM messages m2 WHERE m2.session_id = m.session_id "
+            f"AND m2.role = 'user' ORDER BY m2.{order_col} ASC LIMIT 1) AS title, "
+            f"MAX(created_at) AS updated_at "
+            f"FROM messages m WHERE client_id = ? "
+            f"GROUP BY session_id ORDER BY updated_at DESC LIMIT ?",
+            (client_id, limit),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [
+        {"session_id": sid, "title": title or "Untitled chat", "updated_at": updated_at}
+        for sid, title, updated_at in rows
+    ]
+
+
 def history(session_id: str, limit: int = 20) -> list[dict]:
     order_col = "id" if storage.is_postgres() else "rowid"
     conn = _connect()

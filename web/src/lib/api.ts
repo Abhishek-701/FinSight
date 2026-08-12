@@ -15,6 +15,7 @@ import type {
   SessionMessage,
   UniverseResolveResult,
   UniverseSearchResult,
+  UserPreferences,
   WatchlistItem,
   WhatifResult,
   WhatifTrade,
@@ -92,8 +93,23 @@ export function getSession(
   return jsonFetch(`/api/sessions/${encodeURIComponent(sessionId)}${qs}`)
 }
 
+export function listSessions(
+  clientId?: string | null
+): Promise<{ sessions: { session_id: string; title: string; updated_at: string }[] }> {
+  const qs = clientId ? `?client_id=${encodeURIComponent(clientId)}` : ''
+  return jsonFetch(`/api/sessions${qs}`)
+}
+
 export function getMe(): Promise<MeResponse> {
   return jsonFetch('/api/auth/me')
+}
+
+export function putPreferences(preferences: UserPreferences): Promise<{ user: MeResponse['user'] }> {
+  return jsonFetch('/api/auth/preferences', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ preferences }),
+  })
 }
 
 export function logout(): Promise<{ ok: boolean }> {
