@@ -69,12 +69,14 @@ def chunk_filing(ticker: str, blocks: list[dict], meta: dict) -> list[dict]:
     chunks: list[dict] = []
 
     def add(text: str, item, section_title, kind):
-        cid = f"{ticker}-{len(chunks):04d}"
+        form = meta.get("form") or "10-K"
+        prefix = f"{ticker}-10Q" if form == "10-Q" else ticker
+        cid = f"{prefix}-{len(chunks):04d}"
         chunks.append({
             "chunk_id": cid, "ticker": ticker, "company": company,
             "item": item, "section_title": section_title,
             "accession": meta["accession"], "filing_date": meta["filing_date"],
-            "kind": kind, "text": text,
+            "form": form, "kind": kind, "text": text,
         })
 
     prose_buf: list[str] = []

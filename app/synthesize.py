@@ -27,7 +27,7 @@ def _system_prompt() -> str:
     company_list = ", ".join(companies)
     return (
         "You answer questions strictly from the provided evidence, which comes in two kinds:\n"
-        f"- FILING evidence (chunk ids like [NVDA-0062] or [NVDA-XBRL-...]) exists ONLY for: "
+        "- FILING evidence (chunk ids like [NVDA-0062], [NVDA-10Q-0003], or [NVDA-XBRL-...]) exists ONLY for: "
         f"{company_list}.\n"
         "- MARKET evidence (chunk ids like [NVDA-MKT-...] or [NVDA-CALC-...]) and NEWS evidence "
         "(chunk ids like [NVDA-NEWS-...]) may be present for OTHER tickers too — both are fetched "
@@ -45,7 +45,7 @@ def _system_prompt() -> str:
         "timestamp; news headlines as third-party reports, attributed to their publisher, never as "
         "verified fact.\n"
         "- When using market data, state the as-of time and note it may be delayed and is not investment advice.\n"
-        "- If a FILING question (a figure, risk factor, or other 10-K content) is about a company "
+        "- If a FILING question (a figure, risk factor, or other 10-K/10-Q content) is about a company "
         "with no filing evidence in the context, say: "
         f"'<Company> is not among the companies I have filing data for right now ({company_list}). "
         "I cannot answer that from filings.' Do not describe which companies' data appeared in "
@@ -68,8 +68,17 @@ def _system_prompt() -> str:
         "- For broad or open-ended questions, write flowing themed paragraphs. Do not produce a\n"
         "  report skeleton or outline — write only what the evidence supports, in full sentences.\n"
         "- Report numbers in the units given in the source (e.g. 'in millions'). Be concise and factual."
+        "\n- Label every filing figure with the period it covers (fiscal year end vs quarter end)."
+        " Never describe a full-year 10-K figure as last quarter."
     )
 
+
+PERIOD_GUIDANCE = (
+    "This question asks about a quarter or year-to-date period. Additional framing rules:\n"
+    "- Prefer 10-Q evidence (chunk ids containing 10Q or facts labeled quarter/ytd).\n"
+    "- State the fiscal quarter end next to every quarterly figure.\n"
+    "- Never present a full-year 10-K number as 'last quarter' or 'this quarter'."
+)
 
 VALUATION_GUIDANCE = (
     "This question asks about valuation. Additional framing rules:\n"
@@ -212,13 +221,15 @@ def build_xbrl_context(facts: list[dict]) -> tuple[str, list[dict]]:
 
         # One synthetic chunk per ticker, grouping all its facts.
         concept_short = "_".join(_short(f["concept"]) for f in ticker_facts[:2])
-        chunk_id = f"{ticker}-XBRL-{concept_short}"
+        form = ticker_facts[0].get("form") or "10-K"
+        form_tag = "10Q-XBRL" if form == "10-Q" else "XBRL"
+        chunk_id = f"{ticker}-{form_tag}-{concept_short}"
 
-        # Text mimics the serialized-table format from parse.py so the model
-        # treats it like any other financial statement excerpt.
+        period_kind = ticker_facts[0].get("label", "")
+        source = "10-Q" if form == "10-Q" else "10-K"
         lines = [
-            f"[{company}] Item 8: Financial Statements — XBRL-tagged consolidated figures "
-            f"(period ending {period_end}, filed {filing_date}, in millions unless noted)"
+            f"[{company}] {source} Financial Statements — XBRL-tagged consolidated figures "
+            f"({period_kind}, period ending {period_end}, filed {filing_date}, in millions unless noted)"
         ]
         for f in ticker_facts:
             concept_label = _short(f["concept"])
@@ -236,6 +247,7 @@ def build_xbrl_context(facts: list[dict]) -> tuple[str, list[dict]]:
             "item": "Item 8",
             "section_title": "Financial Statements (XBRL)",
             "filing_date": filing_date,
+            "form": form,
             "fused_score": 1.0,  # XBRL facts rank above RAG chunks
             "text": chunk_text,
             "kind": "xbrl",

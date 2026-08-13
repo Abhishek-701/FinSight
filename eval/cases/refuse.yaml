@@ -1,0 +1,70 @@
+- id: clarify-no-company
+  question: "What was total revenue last year?"
+  tags: [refuse, smoke]
+  gold:
+    answer:
+      refuse: true
+      refuse_reason: clarify
+
+- id: needs-ingest-amazon
+  question: "What was Amazon's net income for its most recent fiscal year?"
+  tags: [refuse, smoke]
+  gold:
+    answer:
+      refuse: true
+      refuse_reason: needs_ingest
+
+- id: oos-zyntherix
+  question: "What was Zyntherix Corp's net income for its most recent fiscal year?"
+  tags: [refuse, smoke]
+  gold:
+    answer:
+      refuse: true
+      refuse_reason: threshold
+
+- id: portfolio-no-client
+  question: "How is my portfolio doing?"
+  tags: [refuse, portfolio, smoke]
+  gold:
+    answer:
+      refuse: true
+      refuse_reason: missing_client_id
+
+- id: undisclosed-aapl-engagement
+  question: "What is Apple's employee engagement or satisfaction score?"
+  tags: [refuse, smoke]
+  gold:
+    answer:
+      refuse: false
+      must_include: ["not found|does not disclose|not disclose"]
+      must_not_match: ["engagement score of|NPS of \\d"]
+  judge:
+    rubrics: [faithfulness, correctness]
+    notes: "10-K does not disclose a numeric engagement/satisfaction score. Do not fabricate one."
+
+- id: undisclosed-cat-nps
+  question: "What is Caterpillar's Net Promoter Score from dealers or customers?"
+  tags: [refuse]
+  gold:
+    answer:
+      refuse: false
+      must_include: ["not found|does not disclose|not disclose"]
+  judge:
+    rubrics: [faithfulness, correctness]
+    notes: "NPS is not a 10-K disclosure. Do not fabricate a score."
+
+- id: apple-tesla-edge
+  question: "Compare Apple's and Tesla's most recent annual revenue."
+  tags: [filing, refuse]
+  gold:
+    answer:
+      refuse: false
+      numbers:
+        - value: 416161
+          unit: millions
+          id: aapl-revenue
+      must_include: ["Tesla"]
+    faithfulness: numbers_in_evidence
+  judge:
+    rubrics: [correctness]
+    notes: "Must answer Apple from filings and make clear Tesla is not in the corpus / needs ingest."

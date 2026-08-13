@@ -38,6 +38,9 @@ CHUNKS_PATH = Path("data/chunks.json")
 OUT_PATH = Path("data/facts.json")
 
 _MIN_ANNUAL_DAYS = 350  # distinguish annual (365 days) from quarterly (~90 days)
+_MIN_QUARTER_DAYS = 60
+_MAX_QUARTER_DAYS = 120
+_MIN_YTD_DAYS = 121
 
 
 def _parse_date(text: str) -> date | None:
@@ -112,6 +115,36 @@ def _annual_context_ids(ctx_map: dict[str, dict]) -> tuple[list[str], list[str]]
     return dur_ids, inst_ids
 
 
+def _duration_ids_in_range(
+    ctx_map: dict[str, dict], min_days: int, max_days: int, limit: int = 2,
+) -> tuple[list[str], list[str]]:
+    """Consolidated duration contexts in [min_days, max_days], most-recent end first, plus
+    matching instant (balance-sheet) context ids for those period-end dates."""
+    dur_candidates = [
+        (cid, info) for cid, info in ctx_map.items()
+        if info.get("consolidated") and info.get("type") == "duration"
+        and info.get("start") and info.get("end")
+        and min_days <= (info["end"] - info["start"]).days <= max_days
+    ]
+    dur_candidates.sort(key=lambda x: x[1]["end"], reverse=True)
+    dur_ids = [cid for cid, _ in dur_candidates[:limit]]
+    ends = [ctx_map[cid]["end"] for cid in dur_ids]
+    inst_by_date: dict = {}
+    for cid, info in ctx_map.items():
+        if info.get("consolidated") and info.get("type") == "instant" and info.get("instant") in ends:
+            inst_by_date[info["instant"]] = cid
+    inst_ids = [inst_by_date[d] for d in ends if d in inst_by_date]
+    return dur_ids, inst_ids
+
+
+def _quarter_context_ids(ctx_map: dict[str, dict]) -> tuple[list[str], list[str]]:
+    return _duration_ids_in_range(ctx_map, _MIN_QUARTER_DAYS, _MAX_QUARTER_DAYS, limit=2)
+
+
+def _ytd_context_ids(ctx_map: dict[str, dict]) -> tuple[list[str], list[str]]:
+    return _duration_ids_in_range(ctx_map, _MIN_YTD_DAYS, _MIN_ANNUAL_DAYS - 1, limit=2)
+
+
 def _extract_facts(
     soup: BeautifulSoup,
     ticker: str,
@@ -119,21 +152,20 @@ def _extract_facts(
     dur_ids: list[str],
     inst_ids: list[str],
     filing_date: str,
+    form: str = "10-K",
+    period_labels: tuple[str, ...] = ("annual_recent", "annual_prior", "annual_2prior"),
 ) -> list[dict]:
-    """Extract ix:nonFraction facts for consolidated annual periods.
-
-    Covers both duration contexts (income statement / CFS) and instant contexts
-    (balance sheet — Assets, Liabilities, StockholdersEquity, etc.).
-    """
+    """Extract ix:nonFraction facts for the given duration/instant context ids."""
     if not dur_ids and not inst_ids:
         return []
 
-    period_labels = ["annual_recent", "annual_prior", "annual_2prior"]
     period_label: dict[str, str] = {}
     for i, cid in enumerate(dur_ids):
-        period_label[cid] = period_labels[i]
+        if i < len(period_labels):
+            period_label[cid] = period_labels[i]
     for i, cid in enumerate(inst_ids):
-        period_label[cid] = period_labels[i]
+        if i < len(period_labels):
+            period_label[cid] = period_labels[i]
 
     facts: list[dict] = []
     for tag in soup.find_all(re.compile(r"nonfraction", re.I)):
@@ -181,20 +213,35 @@ def _extract_facts(
             "scale": scale,                       # from the iXBRL tag
             "context_id": ctx_ref,
             "filing_date": filing_date,
+            "form": form,
         })
 
     return facts
 
 
-def extract_facts_from_html(html: str, ticker: str, filing_date: str) -> list[dict]:
-    """Public per-ticker entrypoint: consolidated annual XBRL facts from one filing's HTML.
+def extract_facts_from_html(html: str, ticker: str, filing_date: str, form: str = "10-K") -> list[dict]:
+    """Public per-ticker entrypoint: consolidated XBRL facts from one filing's HTML.
 
-    Reused by main() (six seed companies) and ingest/pipeline.py (on-demand tickers).
+    10-K → annual_recent/prior/2prior. 10-Q → quarter_recent/prior and ytd_recent/prior.
+    Reused by main() (seed companies) and ingest/pipeline.py (on-demand tickers).
     """
     soup = BeautifulSoup(html, "lxml")
     ctx_map = _build_context_map(soup)
+    if form == "10-Q":
+        facts: list[dict] = []
+        q_dur, q_inst = _quarter_context_ids(ctx_map)
+        y_dur, y_inst = _ytd_context_ids(ctx_map)
+        facts.extend(_extract_facts(
+            soup, ticker, ctx_map, q_dur, q_inst, filing_date, form="10-Q",
+            period_labels=("quarter_recent", "quarter_prior"),
+        ))
+        facts.extend(_extract_facts(
+            soup, ticker, ctx_map, y_dur, y_inst, filing_date, form="10-Q",
+            period_labels=("ytd_recent", "ytd_prior"),
+        ))
+        return facts
     dur_ids, inst_ids = _annual_context_ids(ctx_map)
-    return _extract_facts(soup, ticker, ctx_map, dur_ids, inst_ids, filing_date)
+    return _extract_facts(soup, ticker, ctx_map, dur_ids, inst_ids, filing_date, form="10-K")
 
 
 def _reconcile(all_facts: list[dict], chunks: list[dict]) -> None:

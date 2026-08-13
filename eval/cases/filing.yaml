@@ -1,0 +1,340 @@
+# Filing lookups, YoY, segments, comparisons, multi-statement, semantic.
+# Gold numbers are from the seed 10-K XBRL / Item 8 (see eval/results.md answers).
+
+- id: aapl-opinc-fy2025
+  question: "What was Apple's total operating income for fiscal year 2025?"
+  tags: [filing, lookup, smoke]
+  gold:
+    retrieve:
+      must_include: [AAPL-XBRL-OperatingIncomeLoss]
+      form: 10-K
+      ticker: AAPL
+      k: 8
+    answer:
+      refuse: false
+      numbers:
+        - value: 133050
+          unit: millions
+          period: FY2025
+      must_cite: [AAPL-XBRL-OperatingIncomeLoss]
+      must_not_match: ["net income of"]
+    faithfulness: numbers_in_evidence
+  judge:
+    rubrics: [faithfulness, correctness]
+    notes: "Must report operating income $133,050 million, not net income. Period is FY ended Sep 27, 2025."
+
+- id: nvda-ocf-fy
+  question: "How much net cash did NVIDIA generate from operating activities in its most recent fiscal year?"
+  tags: [filing, lookup]
+  gold:
+    retrieve:
+      must_include: [NVDA-XBRL-NetCashProvidedByUsedInOperatingActivities]
+      ticker: NVDA
+      form: 10-K
+    answer:
+      refuse: false
+      numbers:
+        - value: 102718
+          unit: millions
+          period: FY2026
+      must_cite: [NVDA-XBRL-NetCashProvidedByUsedInOperatingActivities]
+    faithfulness: numbers_in_evidence
+  judge:
+    rubrics: [faithfulness, correctness]
+    notes: "Operating cash flow, not net income. FY ended around Jan 25, 2026."
+
+- id: cat-ltd-fy2025
+  question: "What was Caterpillar's long-term debt as of December 31, 2025?"
+  tags: [filing, lookup]
+  gold:
+    retrieve:
+      must_include: [CAT-XBRL-LongTermDebtNoncurrent]
+      ticker: CAT
+      form: 10-K
+    answer:
+      refuse: false
+      numbers:
+        - value: 30696
+          unit: millions
+          period: FY2025
+      must_cite: [CAT-XBRL-LongTermDebtNoncurrent]
+    faithfulness: numbers_in_evidence
+
+- id: jpm-provision-yoy
+  question: "Did JPMorgan Chase's provision for credit losses increase or decrease from 2024 to 2025, and by how much in dollar terms?"
+  tags: [filing, year_over_year, smoke]
+  gold:
+    retrieve:
+      must_include: [JPM-XBRL-ProvisionForLoanLeaseAndOtherLosses]
+      ticker: JPM
+    answer:
+      refuse: false
+      numbers:
+        - value: 10678
+          unit: millions
+          id: fy2024
+        - value: 14212
+          unit: millions
+          id: fy2025
+        - value: 3534
+          unit: millions
+          id: delta
+      must_include: ["increase"]
+    faithfulness: numbers_in_evidence
+
+- id: nvda-rd-yoy
+  question: "How did NVIDIA's research and development expenses change from fiscal year 2025 to fiscal year 2026, both in dollar terms and as a percentage of total revenue?"
+  tags: [filing, year_over_year]
+  gold:
+    retrieve:
+      must_include: [NVDA-XBRL-ResearchAndDevelopmentExpense]
+      ticker: NVDA
+    answer:
+      refuse: false
+      numbers:
+        - value: 12914
+          unit: millions
+          id: rd-fy2025
+        - value: 18497
+          unit: millions
+          id: rd-fy2026
+      must_cite: [NVDA-XBRL-ResearchAndDevelopmentExpense]
+    faithfulness: numbers_in_evidence
+
+- id: wmt-sams-club-sales
+  question: "What were Sam's Club's net sales for Walmart's fiscal year ended January 31, 2026?"
+  tags: [filing, segment_lookup, smoke]
+  gold:
+    retrieve:
+      ticker: WMT
+      form: 10-K
+    answer:
+      refuse: false
+      numbers:
+        - value: 93015
+          unit: millions
+          period: FY2026
+      must_include: ["Sam"]
+      must_not_match: ["713,?163"]
+    faithfulness: numbers_in_evidence
+  judge:
+    rubrics: [faithfulness, correctness]
+    notes: "Sam's Club segment net sales, NOT Walmart consolidated total."
+
+- id: six-highest-opinc
+  question: "Which of the six companies reported the highest operating income (or closest equivalent) in its most recent fiscal year, and what were each company's figures?"
+  tags: [filing, comparison, smoke]
+  gold:
+    retrieve:
+      k: 24
+    answer:
+      refuse: false
+      numbers:
+        - value: 130387
+          unit: millions
+          id: nvda-opinc
+      must_include: ["NVIDIA"]
+    faithfulness: numbers_in_evidence
+  judge:
+    rubrics: [faithfulness, correctness]
+    notes: "NVIDIA has the highest operating income. Flag that JPM does not report a clean operating-income line."
+
+- id: six-lowest-revenue
+  question: "Which of the six companies had the lowest total revenue in its most recent fiscal year?"
+  tags: [filing, comparison]
+  gold:
+    answer:
+      refuse: false
+      must_include: ["Coca-Cola|Coke"]
+    faithfulness: numbers_in_evidence
+  judge:
+    rubrics: [correctness]
+    notes: "Coca-Cola has the smallest top line of the six seeds."
+
+- id: nvda-eps-basic
+  question: "What was NVIDIA's basic earnings per share for its fiscal year ended January 25, 2026?"
+  tags: [filing, units]
+  gold:
+    retrieve:
+      must_include: [NVDA-XBRL-EarningsPerShareBasic]
+      ticker: NVDA
+    answer:
+      refuse: false
+      numbers:
+        - value: 4.93
+          unit: per_share
+          period: FY2026
+      must_cite: [NVDA-XBRL-EarningsPerShareBasic]
+    faithfulness: numbers_in_evidence
+
+- id: aapl-nvda-cat-net-income-periods
+  question: "Compare Apple's, NVIDIA's, and Caterpillar's most recent net income. What fiscal period does each figure cover?"
+  tags: [filing, fiscal_year]
+  gold:
+    answer:
+      refuse: false
+      must_include: ["2025"]
+    faithfulness: numbers_in_evidence
+  judge:
+    rubrics: [correctness, period_labeled]
+    notes: "Apple FY ends Sep 27 2025, NVIDIA ~Jan 25 2026, Caterpillar Dec 31 2025. All three periods must be labeled."
+
+- id: ko-gross-profit-fy2025
+  question: "What was Coca-Cola's gross profit and gross profit margin for fiscal year 2025?"
+  tags: [filing, computed_metric]
+  gold:
+    answer:
+      refuse: false
+      numbers:
+        - value: 29544
+          unit: millions
+          id: gross-profit
+          period: FY2025
+        - value: 61.6
+          unit: percent
+          id: gross-margin
+    faithfulness: numbers_in_evidence
+
+- id: wmt-cyber-risks
+  question: "What cybersecurity risks did Walmart disclose in its most recent 10-K filing?"
+  tags: [filing, semantic, smoke]
+  gold:
+    retrieve:
+      must_include: [WMT-0027]
+      ticker: WMT
+      form: 10-K
+      k: 8
+    answer:
+      refuse: false
+      must_cite: [WMT-0027]
+  judge:
+    rubrics: [faithfulness, correctness]
+    notes: "Must reflect Walmart Item 1A cybersecurity disclosure, not a generic cyber-risk essay."
+
+- id: supply-chain-risk-six
+  question: "Which of the six companies identified supply chain disruption as a material risk factor in their most recent 10-K?"
+  tags: [filing, semantic]
+  gold:
+    answer:
+      refuse: false
+      must_include: ["Apple"]
+  judge:
+    rubrics: [faithfulness, correctness]
+    notes: "Most or all six disclose supply-chain risk in Item 1A. Name companies from filing evidence, do not invent."
+
+- id: chase-net-revenue-alias
+  question: "What was Chase's total net revenue for fiscal year 2025?"
+  tags: [filing, alias, smoke]
+  gold:
+    retrieve:
+      must_include: [JPM-XBRL-RevenuesNetOfInterestExpense]
+      ticker: JPM
+    answer:
+      refuse: false
+      numbers:
+        - value: 182447
+          unit: millions
+          period: FY2025
+      must_cite: [JPM-XBRL-RevenuesNetOfInterestExpense]
+    faithfulness: numbers_in_evidence
+
+- id: cat-ocf-vs-ni
+  question: "For Caterpillar's fiscal year 2025, what was its net cash provided by operating activities, and how did that compare to its net income for the same period?"
+  tags: [filing, multi_statement]
+  gold:
+    retrieve:
+      ticker: CAT
+    answer:
+      refuse: false
+      numbers:
+        - value: 11739
+          unit: millions
+          id: ocf
+        - value: 8882
+          unit: millions
+          id: ni
+    faithfulness: numbers_in_evidence
+
+- id: aapl-capex-and-assets
+  question: "What were Apple's capital expenditures for fiscal year 2025, and what were its total assets as of September 27, 2025?"
+  tags: [filing, multi_statement]
+  gold:
+    retrieve:
+      ticker: AAPL
+    answer:
+      refuse: false
+      numbers:
+        - value: 12715
+          unit: millions
+          id: capex
+        - value: 359241
+          unit: millions
+          id: assets
+    faithfulness: numbers_in_evidence
+
+- id: nvda-dividends-and-tax
+  question: "How much did NVIDIA pay in dividends during its fiscal year ended January 26, 2026, and what was its income tax provision for the same period?"
+  tags: [filing, multi_statement]
+  gold:
+    retrieve:
+      ticker: NVDA
+    answer:
+      refuse: false
+      numbers:
+        - value: 974
+          unit: millions
+          id: dividends
+        - value: 21383
+          unit: millions
+          id: tax
+    faithfulness: numbers_in_evidence
+
+- id: wmt-buybacks-and-equity
+  question: "How much did Walmart spend repurchasing its own shares during fiscal year ended January 31, 2026, and what was its total shareholders' equity at that date?"
+  tags: [filing, multi_statement]
+  gold:
+    retrieve:
+      ticker: WMT
+    answer:
+      refuse: false
+      numbers:
+        - value: 8088
+          unit: millions
+          id: buybacks
+        - value: 99617
+          unit: millions
+          id: equity
+    faithfulness: numbers_in_evidence
+
+- id: nvda-data-center-segment
+  question: "What was NVIDIA's Data Center segment revenue for its fiscal year ended January 25, 2026?"
+  tags: [filing, segment_lookup, smoke]
+  gold:
+    retrieve:
+      ticker: NVDA
+    answer:
+      refuse: false
+      numbers:
+        - value: 193737
+          unit: millions
+          period: FY2026
+      must_not_match: ["215,?938"]
+    faithfulness: numbers_in_evidence
+  judge:
+    rubrics: [correctness]
+    notes: "Data Center segment revenue is distinct from consolidated $215,938 million."
+
+- id: aapl-revenue-last-year
+  question: "What was Apple's revenue last year?"
+  tags: [filing, lookup]
+  gold:
+    retrieve:
+      must_include: [AAPL-XBRL-RevenueFromContractWithCustomerExcludingAssessedTax]
+      ticker: AAPL
+    answer:
+      refuse: false
+      numbers:
+        - value: 416161
+          unit: millions
+          period: FY2025
+    faithfulness: numbers_in_evidence

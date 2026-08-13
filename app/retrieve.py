@@ -45,7 +45,11 @@ def _load():
     Call invalidate() after ingesting/evicting a dynamic company so this rebuilds.
     """
     chunks = json.loads(open(config.CHUNKS_PATH, encoding="utf-8").read())
-    chunks = chunks + _load_dynamic_chunks()
+    for c in chunks:
+        c.setdefault("form", "10-K")
+    for c in _load_dynamic_chunks():
+        c.setdefault("form", "10-K")
+        chunks.append(c)
     by_id = {c["chunk_id"]: c for c in chunks}
     ids = [c["chunk_id"] for c in chunks]
     bm25 = BM25Okapi([_tok(c["text"]) for c in chunks])
@@ -91,10 +95,13 @@ def _bm25(query: str, tickers: tuple[str, ...], n: int) -> list[str]:
     return out
 
 
-def retrieve(query: str, tickers: list[str] | None, k: int) -> dict:
+def retrieve(query: str, tickers: list[str] | None, k: int, prefer_form: str | None = None) -> dict:
     """Hybrid retrieve. Returns {chunks: [chunk dict...], top_sim: float}.
 
-    top_sim is the dense cosine similarity of the single best chunk (for the refusal gate)."""
+    top_sim is the dense cosine similarity of the single best chunk (for the refusal gate).
+    prefer_form ('10-Q' / '10-K') reorders the fused list so matching chunks fill the k budget
+    first; leftover slots still come from the other form so a miss does not empty the pool.
+    """
     _, by_id, _, _, _ = _load()
     tkey = tuple(tickers or ())
     pool = config.RERANK_POOL if config.USE_RERANKER else max(k * 3, 20)
@@ -116,7 +123,14 @@ def retrieve(query: str, tickers: list[str] | None, k: int) -> dict:
     if config.USE_RERANKER:
         from app import rerank  # lazy import so the model only loads when enabled
         candidates = [{**by_id[cid], "fused_score": fused[cid]} for cid in fused_ids[:pool]]
-        chunks = rerank.rerank(query, candidates)[:k]
+        chunks = rerank.rerank(query, candidates)
     else:
-        chunks = [{**by_id[cid], "fused_score": fused[cid]} for cid in fused_ids[:k]]
+        chunks = [{**by_id[cid], "fused_score": fused[cid]} for cid in fused_ids]
+    for chunk in chunks:
+        chunk.setdefault("form", "10-K")
+    if prefer_form:
+        preferred = [c for c in chunks if c.get("form") == prefer_form]
+        rest = [c for c in chunks if c.get("form") != prefer_form]
+        chunks = preferred + rest
+    chunks = chunks[:k]
     return {"chunks": chunks, "top_sim": top_sim}

@@ -9,7 +9,8 @@ scripts (ingest/download.py, parse.py, chunk.py, xbrl.py) but:
 
 ingest_ticker() raises IngestError (a typed, stable `.reason` code) for the failure modes
 the caller should surface to a user rather than treat as a bug: unknown ticker, no 10-K on
-file (20-F foreign filers, ETFs, SPACs), filing too large for the RAM budget.
+file (20-F foreign filers, ETFs, SPACs), filing too large for the RAM budget. After the 10-K,
+it also fetches the latest 10-Q when available (best-effort; missing 10-Q does not fail ingest).
 """
 
 from __future__ import annotations
@@ -79,6 +80,7 @@ def _embed_and_add(chunks: list[dict]) -> None:
         "ticker": c["ticker"], "company": c["company"],
         "item": c["item"] or "", "section_title": c["section_title"] or "",
         "accession": c["accession"], "filing_date": c["filing_date"], "kind": c["kind"],
+        "form": c.get("form") or "10-K",
     } for c in chunks]
     batch = 100
     for i in range(0, len(chunks), batch):
@@ -104,11 +106,12 @@ def _registry_entry(company: str, cik: str, meta: dict, chunk_count: int) -> dic
 
 
 def ingest_ticker(ticker: str, progress: ProgressCallback = _noop_progress) -> IngestResult:
-    """Fetch, parse, chunk, embed, and fact-extract one company's latest 10-K on demand.
+    """Fetch, parse, chunk, embed, and fact-extract one company's latest 10-K and 10-Q.
 
     Order matters: files land on disk, THEN Chroma is updated, THEN retrieve/facts caches
     are invalidated, THEN (last) the registry is written — so a concurrent question can
     never observe a ticker as "ingested" before its data is actually queryable.
+    10-Q is best-effort: a missing or oversized quarter filing still leaves the 10-K live.
     """
     ticker = ticker.upper()
 
@@ -140,23 +143,52 @@ def ingest_ticker(ticker: str, progress: ProgressCallback = _noop_progress) -> I
         c["company"] = company_name  # chunk_filing() falls back to its own NAMES dict otherwise
 
     progress("extracting_facts", 0.65)
-    ticker_facts = xbrl_mod.extract_facts_from_html(html, ticker, meta["filing_date"])
+    ticker_facts = xbrl_mod.extract_facts_from_html(
+        html, ticker, meta["filing_date"], form=meta.get("form") or "10-K",
+    )
+
+    q_chunks: list[dict] = []
+    q_facts: list[dict] = []
+    try:
+        qmeta = download.latest_form(cik, "10-Q")
+        q_bytes = download._get(download.doc_url(cik, qmeta))  # noqa: SLF001
+        if len(q_bytes) <= max_bytes:
+            qhtml = q_bytes.decode("utf-8", errors="replace")
+            qblocks = parse_mod.parse_filing(qhtml, company_name, qmeta)
+            q_chunks = chunk_mod.chunk_filing(ticker, qblocks, qmeta)
+            for c in q_chunks:
+                c["company"] = company_name
+            q_facts = xbrl_mod.extract_facts_from_html(
+                qhtml, ticker, qmeta["filing_date"], form="10-Q",
+            )
+    except (RuntimeError, OSError, TimeoutError):
+        q_chunks, q_facts = [], []
 
     progress("embedding", 0.8)
-    _embed_and_add(chunks)
+    _embed_and_add(chunks + q_chunks)
 
     progress("saving", 0.95)
     config.DYNAMIC_CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
     config.DYNAMIC_FACTS_DIR.mkdir(parents=True, exist_ok=True)
     (config.DYNAMIC_CHUNKS_DIR / f"{ticker}.json").write_text(json.dumps(chunks), encoding="utf-8")
     (config.DYNAMIC_FACTS_DIR / f"{ticker}.json").write_text(json.dumps(ticker_facts), encoding="utf-8")
+    if q_chunks:
+        (config.DYNAMIC_CHUNKS_DIR / f"{ticker}-10Q.json").write_text(
+            json.dumps(q_chunks), encoding="utf-8",
+        )
+        (config.DYNAMIC_FACTS_DIR / f"{ticker}-10Q.json").write_text(
+            json.dumps(q_facts), encoding="utf-8",
+        )
 
     retrieve.invalidate()
     facts_mod.invalidate()
-    universe.register_ticker(ticker, _registry_entry(company_name, cik, meta, len(chunks)))
+    universe.register_ticker(
+        ticker, _registry_entry(company_name, cik, meta, len(chunks) + len(q_chunks)),
+    )
 
     progress("done", 1.0)
     return IngestResult(
         ticker=ticker, company=company_name, cik=cik, accession=meta["accession"],
-        filing_date=meta["filing_date"], chunk_count=len(chunks), fact_count=len(ticker_facts),
+        filing_date=meta["filing_date"], chunk_count=len(chunks) + len(q_chunks),
+        fact_count=len(ticker_facts) + len(q_facts),
     )

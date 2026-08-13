@@ -34,6 +34,8 @@ def _load_dynamic_facts() -> list[dict]:
             facts.extend(json.loads(path.read_text(encoding="utf-8")))
         except (json.JSONDecodeError, OSError):
             continue
+    for f in facts:
+        f.setdefault("form", "10-K")
     return facts
 
 
@@ -45,6 +47,8 @@ def _load_facts() -> list[dict]:
     """
     path: Path = config.FACTS_PATH
     facts = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    for f in facts:
+        f.setdefault("form", "10-K")
     return facts + _load_dynamic_facts()
 
 
@@ -72,6 +76,8 @@ def query(metric: str, ticker: str, period: str = "annual_recent") -> dict | Non
         metric:  canonical name from XBRL_CONCEPT_MAP, e.g. "revenue", "net_income"
         ticker:  e.g. "AAPL"
         period:  "annual_recent" | "annual_prior" | "annual_2prior"
+                 | "quarter_recent" | "quarter_prior"
+                 | "ytd_recent" | "ytd_prior"
     """
     concepts = _concepts_for(metric, ticker)
     if not concepts:
@@ -91,6 +97,11 @@ def query_yoy(metric: str, ticker: str) -> tuple[dict | None, dict | None]:
     Either or both may be None if not found in the store.
     """
     return query(metric, ticker, "annual_recent"), query(metric, ticker, "annual_prior")
+
+
+def query_qoq(metric: str, ticker: str) -> tuple[dict | None, dict | None]:
+    """Return (quarter_recent, quarter_prior) facts for a quarter-over-quarter question."""
+    return query(metric, ticker, "quarter_recent"), query(metric, ticker, "quarter_prior")
 
 
 def query_all_tickers(metric: str, period: str = "annual_recent") -> dict[str, dict | None]:

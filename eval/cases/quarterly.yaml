@@ -1,0 +1,51 @@
+# Quarterly cases. Until seed 10-Qs are ingested these fail on purpose:
+# a FY 10-K figure served as "last quarter" must not pass.
+
+- id: aapl-revenue-last-quarter
+  question: "What was Apple's revenue last quarter?"
+  tags: [quarterly, lookup]
+  gold:
+    retrieve:
+      must_not_include: [AAPL-XBRL-RevenueFromContractWithCustomerExcludingAssessedTax]
+      form: 10-Q
+      ticker: AAPL
+      k: 8
+    answer:
+      refuse: false
+      must_cite_form: 10-Q
+      must_not_match: ["416,?161"]
+    faithfulness: numbers_in_evidence
+  judge:
+    rubrics: [faithfulness, correctness, period_labeled]
+    notes: "Last quarter means the latest 10-Q period, not FY2025 $416,161 million."
+
+- id: nvda-revenue-last-quarter
+  question: "What was NVIDIA's revenue last quarter?"
+  tags: [quarterly, lookup]
+  gold:
+    retrieve:
+      must_not_include: [NVDA-XBRL-RevenueFromContractWithCustomerExcludingAssessedTax]
+      form: 10-Q
+      ticker: NVDA
+    answer:
+      refuse: false
+      must_cite_form: 10-Q
+      must_not_match: ["215,?938"]
+    faithfulness: numbers_in_evidence
+  judge:
+    rubrics: [period_labeled, correctness]
+    notes: "Do not cite NVIDIA's full-year $215,938 million as last quarter."
+
+- id: aapl-risks-still-10k
+  question: "What are Apple's key risks?"
+  tags: [quarterly, filing]
+  gold:
+    retrieve:
+      ticker: AAPL
+      form: 10-K
+    answer:
+      refuse: false
+      must_cite_form: 10-K
+  judge:
+    rubrics: [faithfulness]
+    notes: "Key risks come from 10-K Item 1A, not the 10-Q risk-factor update unless asked."

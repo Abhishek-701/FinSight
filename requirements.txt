@@ -8,7 +8,7 @@ anthropic==0.109.1       # chat LLM (decompose + synthesize); 0.42 lacked output
 fastapi==0.138.1         # backend
 uvicorn==0.49.0          # ASGI server
 python-dotenv==1.2.2     # load .env
-pyyaml==6.0.2            # eval/questions.yaml
+pyyaml==6.0.2            # eval/cases/*.yaml
 tiktoken==0.8.0          # token counting for ~800-token chunking
 sentence-transformers==5.5.1  # Phase 5 cross-encoder reranker (pulls torch); toggleable via config.USE_RERANKER
 yfinance==1.4.1           # free/delayed market data provider for quote/history tools

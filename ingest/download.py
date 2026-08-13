@@ -50,24 +50,28 @@ def load_ticker_titles() -> dict[str, str]:
     return {entry["ticker"].upper(): entry["title"] for entry in raw.values()}
 
 
-def latest_10k(cik: str) -> dict:
-    """Return metadata for the most recent form exactly '10-K' (rejects 10-K/A amendments)."""
+def latest_form(cik: str, form: str) -> dict:
+    """Return metadata for the most recent filing whose form matches exactly (rejects 10-K/A)."""
     subs = json.loads(_get(f"https://data.sec.gov/submissions/CIK{cik}.json"))
     recent = subs["filings"]["recent"]
     forms = recent["form"]
-    # recent.* are parallel arrays ordered newest-first.
-    for i, form in enumerate(forms):
-        if form == "10-K":  # exact match: "10-K/A" amendments are excluded.
+    for i, found in enumerate(forms):
+        if found == form:
             accession = recent["accessionNumber"][i]
             return {
-                "form": form,
+                "form": found,
                 "accession": accession,
                 "accession_nodash": accession.replace("-", ""),
                 "filing_date": recent["filingDate"][i],
                 "primary_doc": recent["primaryDocument"][i],
                 "company_name": subs.get("name", ""),
             }
-    raise RuntimeError(f"No 10-K found in recent filings for CIK {cik}")
+    raise RuntimeError(f"No {form} found in recent filings for CIK {cik}")
+
+
+def latest_10k(cik: str) -> dict:
+    """Return metadata for the most recent form exactly '10-K' (rejects 10-K/A amendments)."""
+    return latest_form(cik, "10-K")
 
 
 def doc_url(cik: str, meta: dict) -> str:

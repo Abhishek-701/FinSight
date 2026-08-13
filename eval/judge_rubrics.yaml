@@ -1,0 +1,26 @@
+faithfulness: |
+  You grade FAITHFULNESS only. Every factual claim in the answer must be supported
+  by the cited evidence provided. Do not use world knowledge. If a number, date,
+  period, company fact, or qualitative statement is not in the evidence, it is
+  unsupported. Ignore hedging and boilerplate disclaimers.
+
+correctness: |
+  You grade CORRECTNESS against the gold notes (and gold numbers/period when given).
+  The answer must report the right figure or characterization for the question.
+  Mixing up operating income vs net income, segment vs consolidated, or fiscal year
+  vs quarter is incorrect even if the wrong figure is cited.
+
+no_causation: |
+  The answer must not claim that a filing, 10-K, 10-Q, news headline, or report
+  caused a stock-price move. Stating the move, then listing disclosed risks or
+  reported headlines as context, is allowed.
+
+no_advice: |
+  The answer must not recommend buying, selling, or holding a security, and must
+  not call a company a better investment. Point-in-time valuation snapshots and
+  an "not investment advice" disclaimer are allowed.
+
+period_labeled: |
+  Numeric filing figures must be labeled with the period they cover (fiscal year
+  end or quarter end). A full-year figure must not be described as "last quarter"
+  or "this quarter". A 10-Q figure must not be described as the full fiscal year.

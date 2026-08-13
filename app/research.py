@@ -83,8 +83,8 @@ def _offer_ingest(ticker: str, meta: dict) -> dict:
     an "Add <ticker>" chip that kicks off POST /api/companies/{ticker}/ingest (V4.1b endpoints).
     """
     msg = (
-        f"{ticker} isn't in my filing corpus yet. I can fetch its latest 10-K from SEC EDGAR "
-        "and add it — this usually takes under a minute."
+        f"{ticker} isn't in my filing corpus yet. I can fetch its latest 10-K and 10-Q "
+        "from SEC EDGAR and add it — this usually takes under a minute."
     )
     return {
         "answer": msg, "citations": [], "gaps": [], "refused": True,
@@ -153,6 +153,21 @@ def _single_company_subs(question: str, ticker: str) -> list[dict]:
     return subs
 
 
+def filing_period(question: str) -> str:
+    """Which XBRL period label the question is asking for."""
+    if re.search(config.YTD_INTENT_RE, question, re.I):
+        return "ytd_recent"
+    if re.search(config.QUARTERLY_INTENT_RE, question, re.I):
+        return "quarter_recent"
+    return "annual_recent"
+
+
+def prefer_form(question: str) -> str | None:
+    if filing_period(question) in {"quarter_recent", "ytd_recent"}:
+        return "10-Q"
+    return None
+
+
 def detect_xbrl_metrics(question: str) -> list[str]:
     """Return every configured XBRL metric mentioned in the question."""
     matched: list[str] = []
@@ -189,19 +204,30 @@ def xbrl_lookup(question: str, route: dict, metrics: list[str] | None = None) ->
         return None
 
     is_yoy = bool(_YOY_RE.search(question))
+    period = filing_period(question)
     fact_list: list[dict] = []
+
+    def _pair(metric: str, ticker: str) -> tuple[dict | None, dict | None]:
+        if period == "quarter_recent":
+            return facts_mod.query_qoq(metric, ticker)
+        if period == "ytd_recent":
+            return (
+                facts_mod.query(metric, ticker, "ytd_recent"),
+                facts_mod.query(metric, ticker, "ytd_prior"),
+            )
+        return facts_mod.query_yoy(metric, ticker)
 
     for metric in matched_metrics:
         if mode == "decompose":
             for ticker in tickers:
                 if is_yoy:
-                    rec, pri = facts_mod.query_yoy(metric, ticker)
+                    rec, pri = _pair(metric, ticker)
                     if rec:
                         fact_list.append(rec)
                     if pri:
                         fact_list.append(pri)
                 else:
-                    f = facts_mod.query(metric, ticker)
+                    f = facts_mod.query(metric, ticker, period)
                     if f:
                         fact_list.append(f)
         else:
@@ -209,13 +235,13 @@ def xbrl_lookup(question: str, route: dict, metrics: list[str] | None = None) ->
             if not ticker:
                 return None
             if is_yoy:
-                rec, pri = facts_mod.query_yoy(metric, ticker)
+                rec, pri = _pair(metric, ticker)
                 if rec:
                     fact_list.append(rec)
                 if pri:
                     fact_list.append(pri)
             else:
-                f = facts_mod.query(metric, ticker)
+                f = facts_mod.query(metric, ticker, period)
                 if f:
                     fact_list.append(f)
 
@@ -264,10 +290,13 @@ def prepare(question: str, route: dict | None = None) -> dict:
     meta["sub_queries"] = subs
 
     k = config.TOP_K_SINGLE if mode in ("single", "oos") else config.TOP_K_SUB
+    form = prefer_form(question)
     all_chunks: dict[str, dict] = {}
     top_sims = []
     for sub in subs:
-        res = retrieve.retrieve(sub["query"], [sub["ticker"]] if sub["ticker"] else None, k)
+        res = retrieve.retrieve(
+            sub["query"], [sub["ticker"]] if sub["ticker"] else None, k, prefer_form=form,
+        )
         top_sims.append(res["top_sim"])
         meta["retrieval"].append({"ticker": sub["ticker"], "query": sub["query"],
                                   "top_sim": round(res["top_sim"], 3),
@@ -319,24 +348,27 @@ def _citation_payload(cited: Iterable[str], context_chunks: list[dict]) -> list[
 _MARKET_EVIDENCE_INTENTS = {"valuation", "explain_move", "insight", "news", "hybrid", "market_only"}
 
 
-def _guidance_for(research_plan: dict) -> str | None:
+def _guidance_for(research_plan: dict, question: str = "") -> str | None:
     """Map a plan's intent to its synthesis guidance block, if any."""
     intent = research_plan.get("intent")
+    parts: list[str] = []
     if intent == "valuation":
-        return synthesize.VALUATION_GUIDANCE
-    if intent == "explain_move":
-        return synthesize.EXPLAIN_MOVE_GUIDANCE
-    if intent == "news":
-        return synthesize.NEWS_GUIDANCE
-    if intent == "portfolio":
-        return synthesize.PORTFOLIO_GUIDANCE
-    if intent == "portfolio_whatif":
-        return synthesize.WHATIF_GUIDANCE
-    if intent == "portfolio_filings":
-        return synthesize.PORTFOLIO_FILINGS_GUIDANCE
-    if intent == "comparison":
-        return synthesize.COMPARISON_GUIDANCE
-    return None
+        parts.append(synthesize.VALUATION_GUIDANCE)
+    elif intent == "explain_move":
+        parts.append(synthesize.EXPLAIN_MOVE_GUIDANCE)
+    elif intent == "news":
+        parts.append(synthesize.NEWS_GUIDANCE)
+    elif intent == "portfolio":
+        parts.append(synthesize.PORTFOLIO_GUIDANCE)
+    elif intent == "portfolio_whatif":
+        parts.append(synthesize.WHATIF_GUIDANCE)
+    elif intent == "portfolio_filings":
+        parts.append(synthesize.PORTFOLIO_FILINGS_GUIDANCE)
+    elif intent == "comparison":
+        parts.append(synthesize.COMPARISON_GUIDANCE)
+    if prefer_form(question):
+        parts.append(synthesize.PERIOD_GUIDANCE)
+    return "\n\n".join(parts) if parts else None
 
 
 def _suggestions_for(
@@ -557,7 +589,7 @@ def run(
                 "elapsed_ms": _elapsed(started)}
 
     tool_start = time.perf_counter()
-    result = finalize(working_question, meta, _guidance_for(research_plan))
+    result = finalize(working_question, meta, _guidance_for(research_plan, working_question))
     tool_calls.append({
         "tool": "synthesize_report",
         "status": "ok",
@@ -703,7 +735,7 @@ def stream_events(
     ctx = {c["chunk_id"]: c for c in meta["context_chunks"]}
     acc = []
     tool_start = time.perf_counter()
-    for token in synthesize.stream_answer(working_question, meta["context_chunks"], _guidance_for(research_plan)):
+    for token in synthesize.stream_answer(working_question, meta["context_chunks"], _guidance_for(research_plan, working_question)):
         acc.append(token)
         yield sse("token", {"text": token})
 

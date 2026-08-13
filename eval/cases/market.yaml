@@ -1,0 +1,203 @@
+- id: nvda-expensive
+  question: "Is NVIDIA expensive right now?"
+  tags: [valuation, smoke]
+  gold:
+    answer:
+      refuse: false
+      must_include: ["advice|not investment"]
+    faithfulness: numbers_in_evidence
+  judge:
+    rubrics: [faithfulness, no_advice]
+    notes: "P/E and P/S snapshot, not buy/sell advice."
+
+- id: ko-cheap-vs-peers
+  question: "Is Coca-Cola cheap compared to the other companies?"
+  tags: [valuation]
+  gold:
+    answer:
+      refuse: false
+      must_include: ["advice|not investment"]
+  judge:
+    rubrics: [no_advice]
+
+- id: aapl-pe
+  question: "What is Apple's P/E ratio?"
+  tags: [valuation]
+  gold:
+    answer:
+      refuse: false
+    faithfulness: numbers_in_evidence
+  judge:
+    rubrics: [no_advice]
+
+- id: nvda-why-down
+  question: "Why is NVIDIA down this month?"
+  tags: [explain_move, smoke]
+  gold:
+    answer:
+      refuse: false
+      must_not_match:
+        - "caused (the|a) (drop|decline|rally|surge)"
+        - "(filing|10-K|news|headline) (caused|is why|led to)"
+  judge:
+    rubrics: [no_causation, faithfulness]
+    notes: "State the price move, then filing risks and headlines as context, never as the cause."
+
+- id: cat-move-3mo
+  question: "Explain Caterpillar's stock move over the past 3 months"
+  tags: [explain_move]
+  gold:
+    answer:
+      refuse: false
+      must_not_match:
+        - "caused (the|a) (drop|decline|rally|surge)"
+  judge:
+    rubrics: [no_causation]
+
+- id: wmt-jump-recently
+  question: "Why did Walmart's stock jump recently?"
+  tags: [explain_move]
+  gold:
+    answer:
+      refuse: false
+  judge:
+    rubrics: [no_causation]
+
+- id: aapl-latest-news
+  question: "What's the latest news on Apple?"
+  tags: [news, smoke]
+  gold:
+    answer:
+      refuse: false
+  judge:
+    rubrics: [no_causation, faithfulness]
+    notes: "Attribute headlines to publisher/date. Do not claim a headline caused a price move."
+
+- id: nvda-what-happened
+  question: "What happened to NVIDIA recently?"
+  tags: [news]
+  gold:
+    answer:
+      refuse: false
+  judge:
+    rubrics: [no_causation]
+
+- id: aapl-insight-brief
+  question: "Give me an insight brief on Apple"
+  tags: [insight, smoke]
+  gold:
+    answer:
+      refuse: false
+  judge:
+    rubrics: [faithfulness, no_advice]
+
+- id: jpm-full-brief
+  question: "Full brief on JPMorgan"
+  tags: [insight]
+  gold:
+    answer:
+      refuse: false
+  judge:
+    rubrics: [faithfulness, no_advice]
+
+- id: nvda-price-and-revenue
+  question: "What is NVIDIA's current stock price and latest reported revenue?"
+  tags: [hybrid, smoke]
+  gold:
+    retrieve:
+      must_include: [NVDA-XBRL-RevenueFromContractWithCustomerExcludingAssessedTax]
+      ticker: NVDA
+    answer:
+      refuse: false
+      numbers:
+        - value: 215938
+          unit: millions
+          id: revenue
+    faithfulness: numbers_in_evidence
+
+- id: wmt-tell-me-about
+  question: "Tell me about Walmart"
+  tags: [insight]
+  gold:
+    answer:
+      refuse: false
+  judge:
+    rubrics: [faithfulness]
+
+- id: nvda-stock-price
+  question: "What is NVIDIA's current stock price?"
+  tags: [market]
+  gold:
+    answer:
+      refuse: false
+      must_include: ["as of"]
+    faithfulness: numbers_in_evidence
+
+- id: aapl-market-cap
+  question: "What is Apple's current market cap?"
+  tags: [market]
+  gold:
+    answer:
+      refuse: false
+      must_include: ["as of"]
+
+- id: aapl-mktcap-vs-revenue
+  question: "Compare Apple's current market cap to its latest reported revenue."
+  tags: [hybrid]
+  gold:
+    retrieve:
+      must_include: [AAPL-XBRL-RevenueFromContractWithCustomerExcludingAssessedTax]
+      ticker: AAPL
+    answer:
+      refuse: false
+      numbers:
+        - value: 416161
+          unit: millions
+          id: revenue
+    faithfulness: numbers_in_evidence
+
+- id: highest-operating-margin
+  question: "Which company has the highest operating margin?"
+  tags: [screener]
+  gold:
+    answer:
+      refuse: false
+  judge:
+    rubrics: [correctness]
+    notes: "Rank from screener metrics. JPMorgan has no comparable operating margin."
+
+- id: lowest-ps
+  question: "Which company has the lowest P/S ratio?"
+  tags: [screener]
+  gold:
+    answer:
+      refuse: false
+  judge:
+    rubrics: [no_advice]
+
+- id: fastest-revenue-growth
+  question: "Which company has had the fastest revenue growth year over year?"
+  tags: [screener]
+  gold:
+    answer:
+      refuse: false
+
+- id: aapl-or-nvda-expensive
+  question: "Is Apple or NVIDIA more expensive?"
+  tags: [valuation]
+  gold:
+    answer:
+      refuse: false
+      must_include: ["\\|"]
+  judge:
+    rubrics: [no_advice]
+    notes: "Cite each company's own P/E and P/S. Table. Not a better-investment conclusion."
+
+- id: wmt-ko-pe
+  question: "Compare Walmart and Coca-Cola's P/E ratios"
+  tags: [valuation]
+  gold:
+    answer:
+      refuse: false
+  judge:
+    rubrics: [no_advice]

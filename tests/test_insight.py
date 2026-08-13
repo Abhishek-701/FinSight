@@ -40,6 +40,7 @@ class InsightBriefDataTests(unittest.TestCase):
         self.assertTrue(any("-CALC-" in cid for cid in ids), ids)
         self.assertIsNotNone(data["fundamentals"]["operating_margin"])
         self.assertIn("operating_margin", data["ranks"])
+        self.assertIn("latest_quarter", data)
 
     def test_build_brief_data_degrades_without_market(self):
         with patch("app.tools.market.get_provider", side_effect=RuntimeError("no network")):

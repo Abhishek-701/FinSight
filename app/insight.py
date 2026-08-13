@@ -69,6 +69,20 @@ def build_brief_data(ticker: str) -> dict:
     eps_fact = facts.query("eps_diluted", ticker)
     if eps_fact:
         xbrl_facts.append(eps_fact)
+
+    latest_quarter = None
+    q_rev = facts.query("revenue", ticker, "quarter_recent")
+    q_eps = facts.query("eps_diluted", ticker, "quarter_recent")
+    if q_rev or q_eps:
+        latest_quarter = {
+            "period_end": (q_rev or q_eps)["period_end"],
+            "form": "10-Q",
+            "revenue": q_rev["value_display"] if q_rev else None,
+            "eps_diluted": q_eps["value_display"] if q_eps else None,
+        }
+        q_list = [f for f in (q_rev, q_eps) if f]
+        _, q_chunks = synthesize.build_xbrl_context(q_list)
+        evidence.extend(q_chunks)
     xbrl_chunk = None
     if xbrl_facts:
         _, xbrl_chunks = synthesize.build_xbrl_context(xbrl_facts)
@@ -107,6 +121,7 @@ def build_brief_data(ticker: str) -> dict:
         "valuation": valuation,
         "ranks": ranks,
         "news": news_items,
+        "latest_quarter": latest_quarter,
         "disclaimer": config.MARKET_DISCLAIMER,
         "evidence": evidence,
         "market_status": market_status,

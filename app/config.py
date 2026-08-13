@@ -118,6 +118,17 @@ PORTFOLIO_FILINGS_MAX_TICKERS = 4   # bound the retrieval fan-out for holdings-a
 BENCHMARK_MAX_HOLDINGS = 10         # cap priced holdings in the vs-SPY benchmark fan-out
 BENCHMARK_RE = r"\b(vs\.?\s+(the\s+)?market|s&p|spy|benchmark|beat(en)?\s+the\s+market)\b"
 
+# V8: quarterly / YTD questions should hit 10-Q facts and chunks, not FY 10-K figures.
+QUARTERLY_INTENT_RE = (
+    r"\b(last\s+quarter|this\s+quarter|latest\s+quarter|most\s+recent\s+quarter|"
+    r"10-?Q\b|first\s+quarter|second\s+quarter|third\s+quarter|fourth\s+quarter|"
+    r"Q[1-4]\b|quarterly)\b"
+)
+YTD_INTENT_RE = (
+    r"\b(year.to.date|year to date|ytd|"
+    r"(first|nine|six)\s+months\s+ended|nine\s+months|six\s+months\s+ended)\b"
+)
+
 INSIGHT_HISTORY_PERIOD = "3mo"     # trend window for the insight brief
 VALUATION_FACT_METRICS = ["revenue", "net_income", "eps_diluted"]  # facts_lookup inputs for valuation plans
 
