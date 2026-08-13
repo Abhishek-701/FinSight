@@ -301,18 +301,22 @@ def parse_filing(html: str, company: str, meta: dict) -> list[dict]:
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     manifest = json.loads(MANIFEST_PATH.read_text())
-    company_of = {m["ticker"]: m for m in manifest}
     names = {"AAPL": "Apple", "JPM": "JPMorgan Chase", "WMT": "Walmart",
              "KO": "Coca-Cola", "NVDA": "NVIDIA", "CAT": "Caterpillar"}
 
-    for ticker, meta in company_of.items():
-        html = (RAW_DIR / f"{ticker}.html").read_text(encoding="utf-8", errors="replace")
+    for meta in manifest:
+        ticker = meta["ticker"]
+        stem = f"{ticker}-10Q" if (meta.get("form") or "10-K") == "10-Q" else ticker
+        html = (RAW_DIR / f"{stem}.html").read_text(encoding="utf-8", errors="replace")
         blocks = parse_filing(html, names.get(ticker, ticker), meta)
         n_prose = sum(b["kind"] == "prose" for b in blocks)
         n_table = sum(b["kind"] == "table" for b in blocks)
         n_head = sum(b["kind"] == "heading" for b in blocks)
-        (OUT_DIR / f"{ticker}.json").write_text(json.dumps(blocks, indent=2))
-        print(f"{ticker}: {len(blocks)} blocks  ({n_head} headings, {n_prose} prose, {n_table} tables)")
+        (OUT_DIR / f"{stem}.json").write_text(json.dumps(blocks, indent=2))
+        print(
+            f"{ticker} {meta.get('form') or '10-K'}: {len(blocks)} blocks  "
+            f"({n_head} headings, {n_prose} prose, {n_table} tables)"
+        )
 
 
 if __name__ == "__main__":

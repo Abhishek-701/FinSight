@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from eval.numbers import answer_has_gold, evidence_covers, extract_numbers
+from eval.goldnum import answer_has_gold, evidence_covers, extract_numbers
 
 _CITATION_RE = re.compile(r"\[([A-Z]{2,5}-[A-Za-z0-9_-]+)\]")
 
@@ -52,9 +52,16 @@ def score_retrieve(case: dict, retrieved_ids: list[str], forms: dict[str, str] |
     want_form = gold.get("form")
     if want_form:
         targets = must or retrieved_ids
+
+        def form_of(needle: str) -> str:
+            for hid in retrieved_ids:
+                if id_hit(needle, [hid]):
+                    return forms.get(hid, "10-K")
+            return "10-K"
+
         bad = [
             cid for cid in targets
-            if id_hit(cid, retrieved_ids) and forms.get(cid, "10-K") != want_form
+            if id_hit(cid, retrieved_ids) and form_of(cid) != want_form
         ]
         checks.append(_check(
             "retrieve_form",
@@ -149,10 +156,19 @@ def score_answer(case: dict, res: dict) -> dict:
         checks.append(_check("gold_number", ok, f"{label} found={ok}", "answer"))
         period = spec.get("period")
         if period:
-            year_m = re.search(r"(19|20)\d{2}", str(period))
-            period_ok = str(period).lower() in answer.lower() or (
-                bool(year_m) and year_m.group(0) in answer
-            )
+            period_ok = str(period).lower() in answer.lower()
+            iso = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", str(period))
+            if iso and not period_ok:
+                months = (
+                    "January February March April May June "
+                    "July August September October November December"
+                ).split()
+                y, m, d = iso.group(1), int(iso.group(2)), int(iso.group(3))
+                human = f"{months[m - 1]} {d}, {y}"
+                period_ok = human.lower() in answer.lower()
+            elif not period_ok:
+                year_m = re.search(r"(19|20)\d{2}", str(period))
+                period_ok = bool(year_m) and year_m.group(0) in answer
             checks.append(_check(
                 "gold_period",
                 period_ok,

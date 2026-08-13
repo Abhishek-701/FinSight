@@ -1,8 +1,8 @@
 # FinSight
 
-FinSight is a grounded financial research assistant. It answers questions from SEC filings (10-K and, when ingested, the latest 10-Q), live delayed market data, and the user's own portfolio. Every filing figure is cited to a chunk or XBRL fact. If the corpus does not support the answer, it refuses rather than guessing.
+FinSight is a grounded financial research assistant. It answers questions from SEC filings (each seed company's latest 10-K and 10-Q), live delayed market data, and the user's own portfolio. Every filing figure is cited to a chunk or XBRL fact. If the corpus does not support the answer, it refuses rather than guessing.
 
-Six companies ship pre-indexed: Apple, JPMorgan Chase, Walmart, Coca-Cola, NVIDIA, and Caterpillar. Any other US-listed name can be added from chat or the sidebar. FinSight fetches the filing from SEC EDGAR, parses and indexes it, then answers the original question. Market-only questions (price, market cap) work immediately without ingest.
+Six companies ship pre-indexed: Apple, JPMorgan Chase, Walmart, Coca-Cola, NVIDIA, and Caterpillar. Each includes its latest annual and quarterly filing. Any other US-listed name can be added from chat or the sidebar. FinSight fetches the filing from SEC EDGAR, parses and indexes it, then answers the original question. Market-only questions (price, market cap) work immediately without ingest.
 
 Chat is a visible agent. The tool plan shows up before anything runs, each step reports running/done/error with latency, and the answer streams in after. Follow-up chips at the end of a reply are templated off the intent, not invented by the model.
 
@@ -36,6 +36,7 @@ This section is for whoever is reading the repo as a take-home, not as an operat
 
 Ask things like:
 
+- "What was Apple's revenue last quarter?" Latest 10-Q XBRL fact, cited. Not the full-year number.
 - "What was Apple's revenue in fiscal 2024?" Structured XBRL fact, cited.
 - "Compare NVIDIA and Caterpillar's operating margins." Per-company evidence, not one blended number.
 - "Which company has the highest operating margin?" Screener ranking, not a RAG guess.
@@ -196,7 +197,7 @@ app/        main  research  config  retrieve  synthesize  router  facts
 app/agent/  executor  router_llm  router_plan  context  session
 app/tools/  filings  market  news  compute  screen  portfolio_ctx  registry
 web/        Vite + React + TS
-eval/       cases/  run_eval.py  judge.py  calibrate_threshold.py
+eval/       cases/  run_eval.py  goldnum.py  judge.py  calibrate_threshold.py
 tests/
 data/       raw/  parsed/  chunks.json  facts.json  chroma/  dynamic/
 ```

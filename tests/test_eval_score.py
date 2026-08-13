@@ -3,7 +3,7 @@
 import unittest
 
 from eval.cases import load_cases
-from eval.numbers import answer_has_gold, extract_numbers
+from eval.goldnum import answer_has_gold, extract_numbers
 from eval.score import merge_scores, score_answer, score_retrieve
 
 
@@ -74,7 +74,26 @@ class RetrieveScoreTests(unittest.TestCase):
 
 
 class AnswerScoreTests(unittest.TestCase):
-    def test_gold_number_and_citation(self):
+    def test_iso_period_accepts_human_date_not_year_alone(self):
+        case = {"gold": {"answer": {
+            "refuse": False,
+            "numbers": [{"value": 81615, "unit": "millions", "period": "2026-04-26"}],
+        }}}
+        fy_only = {
+            "refused": False,
+            "answer": "NVIDIA's FY2026 revenue was **$215,938 million**.",
+            "citations": [],
+        }
+        self.assertFalse(score_answer(case, fy_only)["passed"])
+        human = {
+            "refused": False,
+            "answer": "Revenue last quarter was **$81,615 million** for the period ended April 26, 2026.",
+            "citations": [],
+        }
+        got = score_answer(case, human)
+        names = {c["name"]: c["passed"] for c in got["checks"]}
+        self.assertTrue(names["gold_number"])
+        self.assertTrue(names["gold_period"])
         case = {
             "gold": {
                 "answer": {

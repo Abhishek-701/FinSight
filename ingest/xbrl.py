@@ -290,25 +290,14 @@ def main() -> None:
 
     for entry in manifest:
         ticker = entry["ticker"]
+        form = entry.get("form") or "10-K"
         filing_date = entry["filing_date"]
-        html_path = Path(entry["raw_path"])
-        print(f"\n{ticker}: {html_path.name}")
+        html_path = Path(str(entry["raw_path"]).replace("\\", "/"))
+        print(f"\n{ticker} {form}: {html_path.name}")
 
         html = html_path.read_text(encoding="utf-8", errors="replace")
-        soup = BeautifulSoup(html, "lxml")
-
-        ctx_map = _build_context_map(soup)
-        dur_ids, inst_ids = _annual_context_ids(ctx_map)
-
-        print(f"  Duration contexts ({len(dur_ids)}):")
-        for cid in dur_ids:
-            info = ctx_map[cid]
-            print(f"    {cid}: {info.get('start')} to {info.get('end')} "
-                  f"({(info['end'] - info['start']).days} days)")
-        print(f"  Balance-sheet instant contexts ({len(inst_ids)}): {inst_ids}")
-
-        facts = _extract_facts(soup, ticker, ctx_map, dur_ids, inst_ids, filing_date)
-        print(f"  Extracted {len(facts)} consolidated annual facts")
+        facts = extract_facts_from_html(html, ticker, filing_date, form=form)
+        print(f"  Extracted {len(facts)} consolidated {form} facts")
         all_facts.extend(facts)
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)

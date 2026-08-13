@@ -109,13 +109,18 @@ def chunk_filing(ticker: str, blocks: list[dict], meta: dict) -> list[dict]:
 
 
 def main() -> None:
-    manifest = {m["ticker"]: m for m in json.loads(MANIFEST_PATH.read_text())}
+    manifest = json.loads(MANIFEST_PATH.read_text())
     all_chunks: list[dict] = []
-    for ticker, meta in manifest.items():
-        blocks = json.loads((PARSED_DIR / f"{ticker}.json").read_text())
+    for meta in manifest:
+        ticker = meta["ticker"]
+        stem = f"{ticker}-10Q" if (meta.get("form") or "10-K") == "10-Q" else ticker
+        blocks = json.loads((PARSED_DIR / f"{stem}.json").read_text())
         cs = chunk_filing(ticker, blocks, meta)
         n_table = sum(c["kind"] == "table" for c in cs)
-        print(f"{ticker}: {len(cs)} chunks ({n_table} table, {len(cs) - n_table} prose)")
+        print(
+            f"{ticker} {meta.get('form') or '10-K'}: {len(cs)} chunks "
+            f"({n_table} table, {len(cs) - n_table} prose)"
+        )
         all_chunks.extend(cs)
     OUT_PATH.write_text(json.dumps(all_chunks, indent=2))
     print(f"\nWrote {len(all_chunks)} chunks -> {OUT_PATH}")

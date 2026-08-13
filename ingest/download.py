@@ -1,11 +1,12 @@
-"""Phase 1 — download the latest 10-K primary document for six companies from SEC EDGAR.
+"""Phase 1 — download the latest 10-K and 10-Q primary documents for six companies from SEC EDGAR.
 
 Flow per company:
-  ticker -> CIK (company_tickers.json) -> submissions JSON -> newest form == "10-K"
-  -> fetch primary document HTML -> data/raw/{TICKER}.html
+  ticker -> CIK (company_tickers.json) -> submissions JSON -> newest exact form
+  -> fetch primary document HTML -> data/raw/{TICKER}.html and data/raw/{TICKER}-10Q.html
 
+10-K is required. 10-Q is best-effort (a missing quarter does not fail the seed run).
 EDGAR etiquette (G11): real User-Agent, rate-limited, cached (no refetch if file exists).
-No synthetic fallback (G3): if a fetch fails we raise and report, never fabricate.
+No synthetic fallback (G3): if a required fetch fails we raise and report, never fabricate.
 """
 
 import json
@@ -74,12 +75,52 @@ def latest_10k(cik: str) -> dict:
     return latest_form(cik, "10-K")
 
 
+def filing_stem(ticker: str, form: str) -> str:
+    """Basename for data/raw and data/parsed (no suffix). 10-K stays {TICKER}; 10-Q is {TICKER}-10Q."""
+    return f"{ticker}-10Q" if form == "10-Q" else ticker
+
+
 def doc_url(cik: str, meta: dict) -> str:
     cik_int = int(cik)  # archive path uses the un-padded CIK.
     return (
         f"https://www.sec.gov/Archives/edgar/data/{cik_int}/"
         f"{meta['accession_nodash']}/{meta['primary_doc']}"
     )
+
+
+def _fetch_form(ticker: str, cik: str, form: str, manifest: list, required: bool) -> None:
+    try:
+        meta = latest_form(cik, form)
+    except RuntimeError as exc:
+        if required:
+            raise
+        print(f"[skip] {ticker} {form}: {exc}")
+        return
+
+    url = doc_url(cik, meta)
+    out_path = RAW_DIR / f"{filing_stem(ticker, form)}.html"
+    if out_path.exists():
+        print(f"[cache] {ticker} {form}: {out_path} already present, skipping download")
+    else:
+        print(f"[fetch] {ticker} {form}: {url}")
+        out_path.write_bytes(_get(url))
+
+    size = out_path.stat().st_size
+    print(
+        f"   {ticker} {form}  CIK={cik}  acc={meta['accession']}  "
+        f"filed={meta['filing_date']}  {size:,} bytes"
+    )
+    manifest.append({
+        "ticker": ticker,
+        "cik": cik,
+        "form": meta["form"],
+        "accession": meta["accession"],
+        "filing_date": meta["filing_date"],
+        "primary_doc": meta["primary_doc"],
+        "source_url": url,
+        "raw_path": out_path.as_posix(),
+        "bytes": size,
+    })
 
 
 def main() -> None:
@@ -91,33 +132,8 @@ def main() -> None:
         if ticker not in cik_map:
             raise RuntimeError(f"Ticker {ticker} not found in EDGAR company_tickers.json")
         cik = cik_map[ticker]
-        meta = latest_10k(cik)
-        url = doc_url(cik, meta)
-        out_path = RAW_DIR / f"{ticker}.html"
-
-        if out_path.exists():
-            print(f"[cache] {ticker}: {out_path} already present, skipping download")
-        else:
-            print(f"[fetch] {ticker}: {url}")
-            html = _get(url)
-            out_path.write_bytes(html)
-
-        size = out_path.stat().st_size
-        print(
-            f"   {ticker}  CIK={cik}  acc={meta['accession']}  "
-            f"filed={meta['filing_date']}  {size:,} bytes"
-        )
-        manifest.append({
-            "ticker": ticker,
-            "cik": cik,
-            "form": meta["form"],
-            "accession": meta["accession"],
-            "filing_date": meta["filing_date"],
-            "primary_doc": meta["primary_doc"],
-            "source_url": url,
-            "raw_path": str(out_path),
-            "bytes": size,
-        })
+        _fetch_form(ticker, cik, "10-K", manifest, required=True)
+        _fetch_form(ticker, cik, "10-Q", manifest, required=False)
 
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2))
     print(f"\nWrote manifest: {MANIFEST_PATH}")

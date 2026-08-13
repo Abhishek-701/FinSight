@@ -96,5 +96,13 @@ class LatestFormTests(unittest.TestCase):
         self.assertEqual(k["accession"], "c")
 
 
+class FilingStemTests(unittest.TestCase):
+    def test_10k_keeps_ticker_name(self):
+        self.assertEqual(download.filing_stem("AAPL", "10-K"), "AAPL")
+
+    def test_10q_is_namespaced(self):
+        self.assertEqual(download.filing_stem("AAPL", "10-Q"), "AAPL-10Q")
+
+
 if __name__ == "__main__":
     unittest.main()

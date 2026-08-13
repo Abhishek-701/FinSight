@@ -7,8 +7,19 @@
     "filing_date": "2025-10-31",
     "primary_doc": "aapl-20250927.htm",
     "source_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
-    "raw_path": "data\\raw\\AAPL.html",
+    "raw_path": "data/raw/AAPL.html",
     "bytes": 1520208
+  },
+  {
+    "ticker": "AAPL",
+    "cik": "0000320193",
+    "form": "10-Q",
+    "accession": "0000320193-26-000020",
+    "filing_date": "2026-07-31",
+    "primary_doc": "aapl-20260627.htm",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000020/aapl-20260627.htm",
+    "raw_path": "data/raw/AAPL-10Q.html",
+    "bytes": 1018210
   },
   {
     "ticker": "JPM",
@@ -18,8 +29,19 @@
     "filing_date": "2026-02-13",
     "primary_doc": "jpm-20251231.htm",
     "source_url": "https://www.sec.gov/Archives/edgar/data/19617/000162828026008131/jpm-20251231.htm",
-    "raw_path": "data\\raw\\JPM.html",
+    "raw_path": "data/raw/JPM.html",
     "bytes": 12927325
+  },
+  {
+    "ticker": "JPM",
+    "cik": "0000019617",
+    "form": "10-Q",
+    "accession": "0001628280-26-054343",
+    "filing_date": "2026-08-06",
+    "primary_doc": "jpm-20260630.htm",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/19617/000162828026054343/jpm-20260630.htm",
+    "raw_path": "data/raw/JPM-10Q.html",
+    "bytes": 11513874
   },
   {
     "ticker": "WMT",
@@ -29,8 +51,19 @@
     "filing_date": "2026-03-13",
     "primary_doc": "wmt-20260131.htm",
     "source_url": "https://www.sec.gov/Archives/edgar/data/104169/000010416926000055/wmt-20260131.htm",
-    "raw_path": "data\\raw\\WMT.html",
+    "raw_path": "data/raw/WMT.html",
     "bytes": 2323981
+  },
+  {
+    "ticker": "WMT",
+    "cik": "0000104169",
+    "form": "10-Q",
+    "accession": "0000104169-26-000102",
+    "filing_date": "2026-05-29",
+    "primary_doc": "wmt-20260430.htm",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/104169/000010416926000102/wmt-20260430.htm",
+    "raw_path": "data/raw/WMT-10Q.html",
+    "bytes": 1154833
   },
   {
     "ticker": "KO",
@@ -40,8 +73,19 @@
     "filing_date": "2026-02-20",
     "primary_doc": "ko-20251231.htm",
     "source_url": "https://www.sec.gov/Archives/edgar/data/21344/000162828026010047/ko-20251231.htm",
-    "raw_path": "data\\raw\\KO.html",
+    "raw_path": "data/raw/KO.html",
     "bytes": 3758140
+  },
+  {
+    "ticker": "KO",
+    "cik": "0000021344",
+    "form": "10-Q",
+    "accession": "0001628280-26-050503",
+    "filing_date": "2026-07-29",
+    "primary_doc": "ko-20260703.htm",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/21344/000162828026050503/ko-20260703.htm",
+    "raw_path": "data/raw/KO-10Q.html",
+    "bytes": 2187535
   },
   {
     "ticker": "NVDA",
@@ -51,8 +95,19 @@
     "filing_date": "2026-02-25",
     "primary_doc": "nvda-20260125.htm",
     "source_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm",
-    "raw_path": "data\\raw\\NVDA.html",
+    "raw_path": "data/raw/NVDA.html",
     "bytes": 1967816
+  },
+  {
+    "ticker": "NVDA",
+    "cik": "0001045810",
+    "form": "10-Q",
+    "accession": "0001045810-26-000052",
+    "filing_date": "2026-05-20",
+    "primary_doc": "nvda-20260426.htm",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/nvda-20260426.htm",
+    "raw_path": "data/raw/NVDA-10Q.html",
+    "bytes": 1167053
   },
   {
     "ticker": "CAT",
@@ -62,7 +117,18 @@
     "filing_date": "2026-02-13",
     "primary_doc": "cat-20251231.htm",
     "source_url": "https://www.sec.gov/Archives/edgar/data/18230/000001823026000008/cat-20251231.htm",
-    "raw_path": "data\\raw\\CAT.html",
+    "raw_path": "data/raw/CAT.html",
     "bytes": 6100469
+  },
+  {
+    "ticker": "CAT",
+    "cik": "0000018230",
+    "form": "10-Q",
+    "accession": "0000018230-26-000046",
+    "filing_date": "2026-08-05",
+    "primary_doc": "cat-20260630.htm",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/18230/000001823026000046/cat-20260630.htm",
+    "raw_path": "data/raw/CAT-10Q.html",
+    "bytes": 4580500
   }
 ]

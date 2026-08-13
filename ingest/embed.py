@@ -45,6 +45,7 @@ def main() -> None:
         "ticker": c["ticker"], "company": c["company"],
         "item": c["item"] or "", "section_title": c["section_title"] or "",
         "accession": c["accession"], "filing_date": c["filing_date"], "kind": c["kind"],
+        "form": c.get("form") or "10-K",
     } for c in chunks]
 
     for i in range(0, len(chunks), BATCH):
