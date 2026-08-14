@@ -26,7 +26,8 @@ export default function Composer({ isBusy, onAsk, onClear }: Props) {
           <input
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder="Ask any financial question..."
+            placeholder="Ask your own question..."
+            id="composer-input"
             autoComplete="off"
             autoFocus
             disabled={isBusy}

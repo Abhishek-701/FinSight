@@ -87,14 +87,6 @@ export default function ResultCard({
             {quote?.asOf && <span className="strip-as-of">as of {quote.asOf}</span>}
           </div>
         )}
-        {showChart && history.length >= 2 && (
-          <PriceChart
-            series={[{ ticker: historyTickerFromCitations(citationDetails), color: '#0ca678', rows: history }]}
-            height={180}
-            mode="price"
-            variant="embedded"
-          />
-        )}
         {answer && (
           <div className="narrative">
             <ReactMarkdown
@@ -102,7 +94,7 @@ export default function ResultCard({
               rehypePlugins={[rehypeRaw]}
               components={{
                 cite: ({ children }) => {
-                  const id = String(children)
+                  const id = String(children).replace(/,/g, '').trim()
                   const detail = citationDetails.find((d) => d.chunk_id === id)
                   return (
                     <button
@@ -119,6 +111,14 @@ export default function ResultCard({
               {markCitations(answer)}
             </ReactMarkdown>
           </div>
+        )}
+        {showChart && history.length >= 2 && (
+          <PriceChart
+            series={[{ ticker: historyTickerFromCitations(citationDetails), color: '#0ca678', rows: history }]}
+            height={180}
+            mode="price"
+            variant="embedded"
+          />
         )}
         {!headline && !streaming && citationDetails.length > 0 && (
           <div className="cite-chips">

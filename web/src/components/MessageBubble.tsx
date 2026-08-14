@@ -89,6 +89,11 @@ export default function MessageBubble({
           </div>
           {example && <span className="example-badge">Example</span>}
         </div>
+        {example && (
+          <div className="example-callout">
+            Recorded from the eval suite — not a live quote. Type below to start your own chat.
+          </div>
+        )}
         <ResultCard
           answer={turn.answer}
           citationDetails={turn.citationDetails}
@@ -97,7 +102,7 @@ export default function MessageBubble({
         />
         {!turn.streaming && turn.needsIngestTicker && <IngestOfferChip turn={turn} onAsk={onAsk} />}
         <ToolTrace turn={turn} />
-        <SuggestionChips turn={turn} onAsk={onAsk} />
+        {!example && <SuggestionChips turn={turn} onAsk={onAsk} />}
       </article>
     </>
   )
