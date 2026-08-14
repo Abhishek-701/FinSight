@@ -57,9 +57,9 @@ function App() {
   useEffect(() => {
     if (!prefsReady || didRestore.current) return
     didRestore.current = true
-    const saved = prefs.last_view
-    if (saved === 'admin' && isAdmin) setView('admin')
-    else if (saved && saved !== 'admin') setView(saved)
+    // Stay on chat. Restoring last_view (screener, portfolio, …) after /api/auth/me
+    // returns yanks the first-impression replay off screen a beat after mount.
+    if (prefs.last_view === 'admin' && isAdmin) setView('admin')
     if (prefs.last_insight_ticker) setInsightTicker(prefs.last_insight_ticker)
     if (prefs.compare_tickers?.length) setCompareTickers(prefs.compare_tickers)
     setHydrated(true)
