@@ -43,9 +43,30 @@ export interface SseEvent {
   data: Record<string, unknown>
 }
 
+export class ApiError extends Error {
+  status: number
+  detail: string
+  constructor(status: number, detail: string) {
+    super(detail)
+    this.status = status
+    this.detail = detail
+  }
+}
+
+function detailFromBody(body: unknown, fallback: string): string {
+  if (body && typeof body === 'object' && 'detail' in body) {
+    const detail = (body as { detail: unknown }).detail
+    if (typeof detail === 'string') return detail
+  }
+  return fallback
+}
+
 /** Shared SSE body parser: both /api/chat (stream:true) and /api/insight/{ticker}/stream use this wire format. */
 async function* parseSse(res: Response): AsyncGenerator<SseEvent> {
-  if (!res.ok || !res.body) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok || !res.body) {
+    const body = await res.json().catch(() => ({}))
+    throw new ApiError(res.status, detailFromBody(body, `${res.status} ${res.statusText}`))
+  }
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
@@ -61,7 +82,11 @@ async function* parseSse(res: Response): AsyncGenerator<SseEvent> {
       const eventLine = raw.split('\n').find((l) => l.startsWith('event: '))
       const dataLine = raw.split('\n').find((l) => l.startsWith('data: '))
       if (!eventLine || !dataLine) continue
-      yield { event: eventLine.slice(7), data: JSON.parse(dataLine.slice(6)) }
+      try {
+        yield { event: eventLine.slice(7), data: JSON.parse(dataLine.slice(6)) }
+      } catch {
+        throw new ApiError(res.status, 'Malformed stream event')
+      }
     }
   }
 }

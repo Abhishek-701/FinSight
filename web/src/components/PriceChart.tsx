@@ -18,7 +18,7 @@ interface Props {
 function toLineData(rows: HistoryRow[], mode: 'percent' | 'price'): { time: string; value: number }[] {
   const byDate = new Map<string, number>()
   for (const row of rows) {
-    if (!row.date || typeof row.close !== 'number') continue
+    if (!row.date || typeof row.close !== 'number' || !Number.isFinite(row.close)) continue
     byDate.set(row.date.slice(0, 10), row.close)
   }
   const dates = [...byDate.keys()].sort()

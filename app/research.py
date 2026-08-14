@@ -8,6 +8,7 @@ behavior remains easy to inspect and compare in evals.
 from __future__ import annotations
 
 import json
+import math
 import re
 import time
 from collections.abc import Callable, Iterable
@@ -609,8 +610,19 @@ def answer(question: str, client_id: str | None = None) -> dict:
     return run(question, client_id=client_id)
 
 
+def _json_safe(value):
+    """NaN/Inf from yfinance is legal Python but illegal JSON — JSON.parse then kills the stream."""
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+        return None
+    return value
+
+
 def sse(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+    return f"event: {event}\ndata: {json.dumps(_json_safe(data), allow_nan=False)}\n\n"
 
 
 def stream_events(

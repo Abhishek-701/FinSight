@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from math import isfinite
 from typing import Any
 
 from app import config, universe
@@ -97,14 +98,20 @@ def market_quote(ticker: str, **_: Any) -> dict:
         market_cap = price * shares
     change = price - previous_close if price is not None and previous_close is not None else None
     change_percent = (change / previous_close * 100) if change is not None and previous_close else None
+    def _finite(value: Any) -> Any:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return round(number, 4) if isfinite(number) else None
     data = {
         "ticker": ticker,
         "company": _company(ticker),
-        "price": price,
-        "previous_close": previous_close,
-        "change": round(change, 4) if change is not None else None,
-        "change_percent": round(change_percent, 2) if change_percent is not None else None,
-        "market_cap": round(market_cap, 2) if market_cap is not None else None,
+        "price": _finite(price) if price is not None else None,
+        "previous_close": _finite(previous_close) if previous_close is not None else None,
+        "change": _finite(change) if change is not None else None,
+        "change_percent": round(change_percent, 2) if change_percent is not None and isfinite(change_percent) else None,
+        "market_cap": round(market_cap, 2) if market_cap is not None and isfinite(float(market_cap)) else None,
         "currency": _first(info, "currency"),
         "source": provider.name,
         "as_of": _now_iso(),
@@ -131,13 +138,16 @@ def market_history(ticker: str, period: str = "1mo", **_: Any) -> dict:
     rows = []
     if not hist.empty:
         for idx, row in hist.iterrows():
+            close = float(row["Close"])
+            if not isfinite(close):
+                continue
             rows.append({
                 "date": str(idx.date()),
-                "open": round(float(row["Open"]), 4),
-                "high": round(float(row["High"]), 4),
-                "low": round(float(row["Low"]), 4),
-                "close": round(float(row["Close"]), 4),
-                "volume": int(row["Volume"]),
+                "open": round(float(row["Open"]), 4) if isfinite(float(row["Open"])) else close,
+                "high": round(float(row["High"]), 4) if isfinite(float(row["High"])) else close,
+                "low": round(float(row["Low"]), 4) if isfinite(float(row["Low"])) else close,
+                "close": round(close, 4),
+                "volume": int(row["Volume"]) if isfinite(float(row["Volume"])) else 0,
             })
     data = {
         "ticker": ticker,

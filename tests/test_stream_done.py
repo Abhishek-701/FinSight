@@ -65,6 +65,13 @@ class StreamOnDoneTests(unittest.TestCase):
         self.assertEqual([m["role"] for m in history], ["user", "assistant"])
         self.assertEqual(history[1]["content"], "The answer is 42.")
 
+    def test_sse_serializes_nan_as_null(self):
+        from app.research import sse
+        raw = sse("tool_result", {"price": float("nan"), "ok": True})
+        payload = json.loads(raw.split("data: ", 1)[1].strip())
+        self.assertIsNone(payload["price"])
+        self.assertTrue(payload["ok"])
+
     def test_on_done_writes_an_audit_row(self):
         self._post_streaming_chat()
         row = audit.recent(limit=1)[0]

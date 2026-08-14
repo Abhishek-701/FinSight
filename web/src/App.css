@@ -156,7 +156,7 @@ details.source-detail pre { white-space: pre-wrap; color: #4d493f; font-size: 12
 .source-inspector-id { margin-top: 10px; font-size: 10px; color: var(--muted); font-family: monospace; overflow-wrap: anywhere; }
 
 /* Composer */
-.composer { position: fixed; left: 260px; right: 280px; bottom: 0; border-top: 1px solid var(--line); background: rgba(246, 244, 239, 0.94); backdrop-filter: blur(14px); padding: 14px 28px 16px; }
+.composer { position: fixed; left: 260px; right: 280px; bottom: 0; z-index: 30; border-top: 1px solid var(--line); background: rgba(246, 244, 239, 0.94); backdrop-filter: blur(14px); padding: 14px 28px 16px; pointer-events: auto; }
 .composer-inner { max-width: 860px; margin: 0 auto; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .chip { border: 1px solid var(--line); color: #5a554c; background: #fff; border-radius: 999px; padding: 6px 11px; font-size: 12px; cursor: pointer; }

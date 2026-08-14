@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getSession, listSessions, streamChat } from '../lib/api'
+import { ApiError, getSession, listSessions, streamChat } from '../lib/api'
 import { getClientId } from '../lib/clientId'
 import { titleFromQuestion } from '../lib/format'
 import type { CitationDetail, LiveToolCall, PlanSummary, ToolCallSummary } from '../lib/types'
@@ -26,6 +26,16 @@ export interface ChatWindow {
 const SESSION_KEY = 'finsight_session_id'
 const WINDOWS_KEY = 'finsight_chat_windows'
 const TURNS_KEY = 'finsight_local_turns'
+
+function failMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 429) return 'Too many requests. Wait a moment and try again.'
+    if (err.status >= 500) return 'Server error. Please try again.'
+    if (err.detail && err.detail !== `${err.status}`) return err.detail
+  }
+  if (err instanceof TypeError) return 'Could not reach the server. If the demo was asleep, wait and retry.'
+  return 'Request failed. Please try again.'
+}
 
 export const DEFAULT_PROMPTS = [
   "What is NVIDIA's current stock price and latest reported revenue?",
@@ -99,7 +109,9 @@ export function useChat({
 
       let sid = sessionId
       try {
-        for await (const evt of streamChat(question, sid, getClientId())) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            for await (const evt of streamChat(question, sid, getClientId())) {
           if (evt.event === 'session') {
             sid = evt.data.session_id as string
             setSessionId(sid)
@@ -172,14 +184,27 @@ export function useChat({
               return next
             })
           }
+            }
+            break
+          } catch (err) {
+            const staleSession =
+              err instanceof ApiError && err.status === 404 && err.detail === 'session_not_found'
+            if (staleSession && sid && attempt === 0) {
+              sid = null
+              setSessionId(null)
+              localStorage.removeItem(SESSION_KEY)
+              continue
+            }
+            throw err
+          }
         }
-      } catch {
+      } catch (err) {
         setTurns((prev) => {
           const next = [...prev]
           const last = next[next.length - 1]
           next[next.length - 1] = {
             ...last,
-            answer: last.answer || 'Request failed. Please try again.',
+            answer: last.answer || failMessage(err),
             streaming: false,
           }
           return next

@@ -6,7 +6,13 @@ export default function DemoStage({ onAsk }: { onAsk: (q: string) => void }) {
   const { turn, phase, skip, autoOpenChunkId } = useReplay()
 
   function askYourself() {
-    document.getElementById('composer-input')?.focus()
+    if (phase === 'playing') skip()
+    window.setTimeout(() => {
+      const input = document.getElementById('composer-input')
+      if (!(input instanceof HTMLInputElement)) return
+      input.focus()
+      input.scrollIntoView({ block: 'nearest' })
+    }, 0)
   }
 
   return (
