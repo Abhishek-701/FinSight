@@ -25,11 +25,21 @@ function ToolTrace({ turn }: { turn: ChatTurn }) {
   )
 }
 
-function SuggestionChips({ turn, onAsk }: { turn: ChatTurn; onAsk: (q: string) => void }) {
-  if (turn.streaming || !turn.suggestions?.length) return null
+function SuggestionChips({
+  turn,
+  onAsk,
+  asked,
+}: {
+  turn: ChatTurn
+  onAsk: (q: string) => void
+  asked: string[]
+}) {
+  const askedSet = new Set(asked.map((q) => q.trim().toLowerCase()))
+  const chips = (turn.suggestions || []).filter((q) => !askedSet.has(q.trim().toLowerCase()))
+  if (turn.streaming || !chips.length) return null
   return (
     <div className="suggestion-chips">
-      {turn.suggestions.map((q) => (
+      {chips.map((q) => (
         <button key={q} className="chip" onClick={() => onAsk(q)}>
           {q}
         </button>
@@ -71,11 +81,15 @@ export default function MessageBubble({
   onAsk,
   autoOpenChunkId,
   example,
+  showSuggestions = true,
+  asked = [],
 }: {
   turn: ChatTurn
   onAsk: (q: string) => void
   autoOpenChunkId?: string | null
   example?: boolean
+  showSuggestions?: boolean
+  asked?: string[]
 }) {
   return (
     <>
@@ -102,7 +116,7 @@ export default function MessageBubble({
         />
         {!turn.streaming && turn.needsIngestTicker && <IngestOfferChip turn={turn} onAsk={onAsk} />}
         <ToolTrace turn={turn} />
-        {!example && <SuggestionChips turn={turn} onAsk={onAsk} />}
+        {!example && showSuggestions && <SuggestionChips turn={turn} onAsk={onAsk} asked={asked} />}
       </article>
     </>
   )

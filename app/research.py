@@ -343,6 +343,7 @@ def _citation_payload(cited: Iterable[str], context_chunks: list[dict]) -> list[
         "kind": ctx[cid].get("kind"),
         "data": ctx[cid].get("data", {}),
         "facts": ctx[cid].get("facts", []),
+        "form": ctx[cid].get("form") or "",
     } for cid in cited if cid in ctx]
 
 
@@ -374,9 +375,10 @@ def _guidance_for(research_plan: dict, question: str = "") -> str | None:
 
 def _suggestions_for(
     research_plan: dict, route: dict, refused: bool, refusal_reason: str | None,
+    asked: list[str] | None = None,
 ) -> list[str]:
     ticker = route.get("ticker") or next(iter(route.get("tickers") or []), None)
-    return suggest.suggest(research_plan.get("intent"), ticker, refused, refusal_reason)
+    return suggest.suggest(research_plan.get("intent"), ticker, refused, refusal_reason, asked=asked)
 
 
 def _merge_evidence(meta: dict, evidence: list[dict]) -> dict:
@@ -579,9 +581,13 @@ def run(
     research_plan = plan(working_question, route)
     meta, tool_calls = _prepare_with_tools(working_question, route, research_plan, client_id)
 
+    asked = [question, working_question]
+    if conversation_context and conversation_context.last_user_question:
+        asked.append(conversation_context.last_user_question)
+
     if meta.get("refused"):
         reflection = reflect(meta, meta["answer"])
-        suggestions = _suggestions_for(research_plan, route, True, meta.get("refusal_reason"))
+        suggestions = _suggestions_for(research_plan, route, True, meta.get("refusal_reason"), asked)
         return {**meta, "plan": research_plan, "tool_calls": tool_calls,
                 "reflection": reflection, "question": question,
                 "contextualized_question": working_question,
@@ -597,7 +603,7 @@ def run(
         "citations": result["citations"],
         "elapsed_ms": _elapsed(tool_start),
     })
-    suggestions = _suggestions_for(research_plan, route, False, None)
+    suggestions = _suggestions_for(research_plan, route, False, None, asked)
     return {**result, "plan": research_plan, "tool_calls": tool_calls,
             "question": question, "contextualized_question": working_question,
             "conversation_context": context_meta,
@@ -726,9 +732,13 @@ def stream_events(
         else:
             yield sse(kind, payload)
 
+    asked = [question, working_question]
+    if conversation_context and conversation_context.last_user_question:
+        asked.append(conversation_context.last_user_question)
+
     if meta.get("refused"):
         reflection = reflect(meta, meta["answer"])
-        suggestions = _suggestions_for(research_plan, route, True, meta.get("refusal_reason"))
+        suggestions = _suggestions_for(research_plan, route, True, meta.get("refusal_reason"), asked)
         yield sse("token", {"text": meta["answer"]})
         done_payload = {"citations": [], "gaps": [], "refused": True,
                         "refusal_reason": meta["refusal_reason"],
@@ -744,7 +754,6 @@ def stream_events(
         yield sse("done", done_payload)
         return
 
-    ctx = {c["chunk_id"]: c for c in meta["context_chunks"]}
     acc = []
     tool_start = time.perf_counter()
     for token in synthesize.stream_answer(working_question, meta["context_chunks"], _guidance_for(research_plan, working_question)):
@@ -760,16 +769,8 @@ def stream_events(
         "citations": cited,
         "elapsed_ms": _elapsed(tool_start),
     })
-    citations = [{
-        "chunk_id": cid,
-        "company": ctx[cid]["company"],
-        "section": ctx[cid].get("section_title") or ctx[cid].get("item") or "",
-        "text": ctx[cid]["text"],
-        "kind": ctx[cid].get("kind"),
-        "data": ctx[cid].get("data", {}),
-        "facts": ctx[cid].get("facts", []),
-    } for cid in cited if cid in ctx]
-    suggestions = _suggestions_for(research_plan, route, False, None)
+    citations = _citation_payload(cited, meta["context_chunks"])
+    suggestions = _suggestions_for(research_plan, route, False, None, asked)
     done_payload = {"citations": citations, "gaps": reflection["gaps"], "refused": False,
                     "plan": research_plan, "tool_calls": tool_calls,
                     "reflection": reflection, "question": question,

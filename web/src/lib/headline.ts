@@ -130,17 +130,36 @@ export function quoteFromCitations(details: CitationDetail[]): {
   return null
 }
 
-export function citeForm(chunkId: string): string {
+function formFromFacts(detail: CitationDetail): string | null {
+  const facts = Array.isArray(detail.facts) ? detail.facts : []
+  for (const raw of facts) {
+    if (raw && typeof raw === 'object' && 'form' in raw) {
+      const form = (raw as { form?: string }).form
+      if (form) return form
+    }
+  }
+  return null
+}
+
+export function citeForm(source: CitationDetail | string): string {
+  if (typeof source !== 'string') {
+    if (source.form) return source.form
+    const fromFact = formFromFacts(source)
+    if (fromFact) return fromFact
+    return citeForm(source.chunk_id)
+  }
+  const chunkId = source
   if (chunkId.includes('NEWS')) return 'News'
   if (chunkId.includes('-MKT-')) return 'Market'
   if (chunkId.includes('-CALC-')) return 'Calc'
   if (chunkId.includes('10Q') || chunkId.includes('10-Q')) return '10-Q'
   if (chunkId.includes('XBRL') || chunkId.includes('10K') || chunkId.includes('10-K')) return '10-K'
+  if (/^[A-Z]{1,5}-\d{4}$/.test(chunkId)) return '10-K'
   return 'Filing'
 }
 
 export function citeChipLabel(detail: CitationDetail): string {
-  const form = citeForm(detail.chunk_id)
+  const form = citeForm(detail)
   if (isXbrl(detail)) {
     const hit = xbrlHeadline(detail)
     return hit ? `${form} · ${hit.label}` : form

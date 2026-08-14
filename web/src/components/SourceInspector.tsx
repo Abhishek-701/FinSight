@@ -20,14 +20,7 @@ function factPeriod(detail: CitationDetail): string | null {
 }
 
 function factForm(detail: CitationDetail): string {
-  const facts = Array.isArray(detail.facts) ? detail.facts : []
-  for (const raw of facts) {
-    if (raw && typeof raw === 'object' && 'form' in raw) {
-      const form = (raw as { form?: string }).form
-      if (form) return form
-    }
-  }
-  return citeForm(detail.chunk_id)
+  return citeForm(detail)
 }
 
 export default function SourceInspector({ detail, onClose }: Props) {

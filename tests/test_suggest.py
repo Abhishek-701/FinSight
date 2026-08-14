@@ -43,6 +43,18 @@ class SuggestTests(unittest.TestCase):
             out = suggest.suggest(intent, "AAPL", refused=False, refusal_reason=None)
             self.assertLessEqual(len(out), 3)
 
+    def test_asked_questions_are_not_suggested_again(self):
+        asked = ["How does Apple rank on operating margin?"]
+        out = suggest.suggest("valuation", "AAPL", refused=False, refusal_reason=None, asked=asked)
+        self.assertTrue(out)
+        self.assertTrue(all(q.lower() not in {a.lower() for a in asked} for q in out))
+
+    def test_valuation_and_explain_move_do_not_ping_pong(self):
+        valuation = suggest.suggest("valuation", "AAPL", refused=False, refusal_reason=None)
+        explain = suggest.suggest("explain_move", "AAPL", refused=False, refusal_reason=None)
+        self.assertFalse(any("expensive" in q.lower() for q in valuation))
+        self.assertFalse(any("move this month" in q.lower() for q in explain))
+
 
 if __name__ == "__main__":
     unittest.main()

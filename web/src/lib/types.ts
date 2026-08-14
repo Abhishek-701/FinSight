@@ -4,6 +4,7 @@ export interface CitationDetail {
   section: string
   text: string
   kind?: string
+  form?: string
   data?: Record<string, unknown>
   facts?: unknown[]
 }

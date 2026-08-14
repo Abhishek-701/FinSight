@@ -10,23 +10,24 @@ from app import universe
 
 _TEMPLATES: dict[str, list[str]] = {
     "valuation": [
-        "Why did {company} move this month?",
         "How does {company} rank on operating margin?",
+        "What is {company}'s latest reported revenue?",
     ],
     "explain_move": [
-        "Is {company} expensive right now?",
         "What risk factors did {company} disclose?",
+        "What is {company}'s latest reported revenue?",
     ],
     "insight": [
-        "Is {company} expensive right now?",
-        "Why did {company} move this month?",
+        "What risk factors did {company} disclose?",
+        "How does {company} rank on operating margin?",
     ],
     "news": [
-        "Is {company} expensive right now?",
+        "What is {company}'s latest reported revenue?",
+        "What risk factors did {company} disclose?",
     ],
     "comparison": [
-        "Why did {company} move this month?",
         "How does {company} rank on operating margin?",
+        "What is {company}'s latest reported revenue?",
     ],
     "portfolio": [
         "How concentrated is my portfolio?",
@@ -45,27 +46,33 @@ _TEMPLATES: dict[str, list[str]] = {
 _NO_TICKER_INTENTS = ("portfolio", "portfolio_whatif", "portfolio_filings")
 
 _GENERIC = [
-    "What risk factors did {company} disclose?",
+    "How does {company} rank on operating margin?",
     "What is {company}'s latest reported revenue?",
 ]
 
 
+def _fresh(questions: list[str], asked: list[str] | None) -> list[str]:
+    seen = {a.strip().lower() for a in (asked or []) if a}
+    return [q for q in questions if q.strip().lower() not in seen][:3]
+
+
 def suggest(
     intent: str | None, ticker: str | None, refused: bool, refusal_reason: str | None,
+    asked: list[str] | None = None,
 ) -> list[str]:
     """Return up to 3 follow-up question templates, or [] when nothing sensible applies."""
     if refusal_reason == "needs_ingest" and ticker:
         company = universe.company_name(ticker)
-        return [
+        return _fresh([
             f"Once added, is {company} expensive right now?",
             f"Once added, what is {company}'s latest reported revenue?",
-        ]
+        ], asked)
     if refused:
         return []
     if intent in _NO_TICKER_INTENTS:
-        return list(_TEMPLATES[intent])
+        return _fresh(list(_TEMPLATES[intent]), asked)
     if not ticker:
         return []
     company = universe.company_name(ticker)
     templates = _TEMPLATES.get(intent or "", _GENERIC)
-    return [t.format(company=company) for t in templates][:3]
+    return _fresh([t.format(company=company) for t in templates], asked)

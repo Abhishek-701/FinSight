@@ -18,7 +18,8 @@ input {
 .app {
   display: grid;
   grid-template-columns: 260px 1fr 280px;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
   background: var(--bg);
   color: var(--ink);
   font-size: 14px;
@@ -33,6 +34,7 @@ input {
   flex-direction: column;
   gap: 18px;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; }
@@ -52,7 +54,7 @@ button:disabled { opacity: 0.55; cursor: default; }
 .recent button { width: 100%; border: 0; text-align: left; background: transparent; color: #5b564d; padding: 7px 0; cursor: pointer; font-size: 12px; }
 
 /* Main */
-.main { display: flex; flex-direction: column; min-width: 0; }
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .topbar { height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; border-bottom: 1px solid var(--line); background: rgba(255, 253, 248, 0.8); backdrop-filter: blur(10px); }
 .title h1 { margin: 0; font-size: 18px; letter-spacing: -0.02em; }
 .title p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
@@ -74,7 +76,7 @@ button:disabled { opacity: 0.55; cursor: default; }
 .save-prompt-banner-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .save-prompt-banner-actions .save-prompt-signin { border: 0; background: transparent; color: var(--green-dark); font-weight: 700; cursor: pointer; }
 .save-prompt-banner-actions .save-prompt-dismiss { border: 0; background: transparent; color: var(--muted); font-weight: 700; cursor: pointer; }
-.workspace { flex: 1; padding: 22px 28px 150px; overflow: auto; }
+.workspace { flex: 1; min-height: 0; padding: 22px 28px 150px; overflow: auto; }
 .thread { max-width: 860px; margin: 0 auto; display: grid; gap: 18px; min-width: 0; width: 100%; }
 .user-query { justify-self: end; max-width: 520px; padding: 13px 16px; border-radius: 18px 18px 4px 18px; background: #fff; border: 1px solid var(--line); }
 
@@ -169,7 +171,7 @@ input:focus { border-color: #b9dec4; box-shadow: 0 0 0 4px rgba(12, 166, 120, 0.
 .footnote { text-align: center; color: var(--muted); font-size: 11px; margin-top: 8px; }
 
 /* Market/watchlist panel */
-.market-panel { border-left: 1px solid var(--line); background: #fbfaf6; padding: 18px 16px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+.market-panel { border-left: 1px solid var(--line); background: #fbfaf6; padding: 18px 16px; display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow-y: auto; }
 .watchlist-rows { display: grid; gap: 8px; margin-bottom: 12px; }
 .watchlist-row { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
 .star-btn { border: 0; background: transparent; color: var(--green); font-size: 16px; cursor: pointer; padding: 0 2px; }
