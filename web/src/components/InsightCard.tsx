@@ -1,10 +1,8 @@
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import rehypeRaw from 'rehype-raw'
 import type { InsightState } from '../hooks/useInsight'
-import { markCitations, money, num, pct } from '../lib/format'
 import NewsPanel from './NewsPanel'
-import Sparkline from './Sparkline'
+import PriceChart from './PriceChart'
+import ResultCard from './ResultCard'
+import { money, num, pct } from '../lib/format'
 
 const RANK_LABELS: Record<string, string> = {
   operating_margin: 'Operating Margin',
@@ -17,7 +15,6 @@ function QuoteStrip({ state }: { state: InsightState }) {
   const { card } = state
   if (!card) return null
   const quote = card.quote
-  const rows = card.history?.rows ?? []
   const changePct = quote?.change_percent ?? null
   const positive = (changePct ?? 0) >= 0
   return (
@@ -40,7 +37,6 @@ function QuoteStrip({ state }: { state: InsightState }) {
       ) : (
         <span className="muted">Live quote unavailable — showing filing fundamentals only.</span>
       )}
-      {rows.length >= 2 && <Sparkline rows={rows} width={110} height={30} />}
       {quote?.as_of && <span className="strip-as-of">as of {quote.as_of.slice(0, 10)}</span>}
     </div>
   )
@@ -107,24 +103,6 @@ function FundamentalsRow({ state }: { state: InsightState }) {
   )
 }
 
-function Sources({ state }: { state: InsightState }) {
-  if (!state.citationDetails.length) return null
-  return (
-    <>
-      <div className="sources">Sources: {state.citationDetails.map((d) => d.chunk_id).join(' | ')}</div>
-      {state.citationDetails.map((d) => (
-        <details className="source-detail" key={d.chunk_id}>
-          <summary>
-            {d.chunk_id} — {d.company}
-            {d.section ? ` — ${d.section}` : ''}
-          </summary>
-          <pre>{d.text}</pre>
-        </details>
-      ))}
-    </>
-  )
-}
-
 export default function InsightCard({ state }: { state: InsightState }) {
   if (!state.card && state.streaming) {
     return <p className="muted">Loading insight brief...</p>
@@ -135,6 +113,8 @@ export default function InsightCard({ state }: { state: InsightState }) {
   if (!state.card) {
     return <p className="muted">Select a company to see its insight brief.</p>
   }
+
+  const rows = state.card.history?.rows ?? []
 
   return (
     <article className="answer-card insight-card">
@@ -148,15 +128,23 @@ export default function InsightCard({ state }: { state: InsightState }) {
         </div>
       </div>
       <QuoteStrip state={state} />
+      {rows.length >= 2 && (
+        <PriceChart
+          series={[{ ticker: state.card.ticker, color: '#0ca678', rows }]}
+          height={180}
+          mode="price"
+          variant="embedded"
+        />
+      )}
       <ValuationGrid state={state} />
       <FundamentalsRow state={state} />
       <NewsPanel items={state.card.news} />
-      <div className="narrative">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-          {markCitations(state.narrative)}
-        </ReactMarkdown>
-      </div>
-      {!state.streaming && <Sources state={state} />}
+      <ResultCard
+        answer={state.narrative}
+        citationDetails={state.citationDetails}
+        streaming={state.streaming}
+        showChart={false}
+      />
       {state.card.disclaimer && <div className="footnote">{state.card.disclaimer}</div>}
     </article>
   )

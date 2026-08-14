@@ -30,6 +30,14 @@ export function num(value: number | null | undefined, dp = 2): string | null {
   return value.toLocaleString(undefined, { maximumFractionDigits: dp })
 }
 
+export function formatPeriod(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const day = iso.slice(0, 10)
+  const date = new Date(`${day}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return iso
+  return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+}
+
 const TOOL_LABELS: Record<string, string> = {
   facts_lookup: 'Looking up filed financials',
   filing_rag: 'Searching filings',

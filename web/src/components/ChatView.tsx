@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import DemoStage from './DemoStage'
 import MessageBubble from './MessageBubble'
 import type { ChatTurn } from '../hooks/useChat'
 
@@ -12,12 +13,7 @@ export default function ChatView({ turns, onAsk }: { turns: ChatTurn[]; onAsk: (
   if (!turns.length) {
     return (
       <div className="thread">
-        <div className="empty">
-          <div>
-            <b>Ask any financial research question.</b>
-            Compare market prices, filing facts, risks, and valuation metrics with cited evidence.
-          </div>
-        </div>
+        <DemoStage onAsk={onAsk} />
       </div>
     )
   }

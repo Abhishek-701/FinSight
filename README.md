@@ -30,7 +30,7 @@ This section is for whoever is reading the repo as a take-home, not as an operat
 
 **What I left out on purpose.** Alerts and email digests need a process that is awake. This service is not. Lot-level cost basis is a real schema change for P&L that barely moves a demo, so holdings keep one average cost per ticker. The cross-encoder reranker is on locally and off in the deploy image because torch does not fit in 512MB. The similarity threshold is 0.50 and the gap around it is thin. I left it there rather than pretend a 10-probe calibration was decisive.
 
-**Stack choices.** FastAPI, Chroma, BM25, OpenAI embeddings, Claude for synthesis, yfinance for delayed quotes, EDGAR for filings. React + Vite on the front, SVG charts with no charting library. One Docker image. Sqlite locally, Postgres when `DATABASE_URL` is set. User data and the filing corpus are separate stores so a Render disk wipe does not require re-embedding Apple.
+**Stack choices.** FastAPI, Chroma, BM25, OpenAI embeddings, Claude for synthesis, yfinance for delayed quotes, EDGAR for filings. React + Vite on the front, TradingView lightweight-charts for price panes, SVG sparklines for tiny strips. One Docker image. Sqlite locally, Postgres when `DATABASE_URL` is set. User data and the filing corpus are separate stores so a Render disk wipe does not require re-embedding Apple.
 
 ## Try it
 
