@@ -2,7 +2,13 @@ import MessageBubble from './MessageBubble'
 import { REPLAY_HANDOFF } from '../demo/appleRevenueReplay'
 import { useReplay } from '../demo/useReplay'
 
-export default function DemoStage({ onAsk }: { onAsk: (q: string) => void }) {
+export default function DemoStage({
+  onAsk,
+  onOpenFeatures,
+}: {
+  onAsk: (q: string) => void
+  onOpenFeatures: () => void
+}) {
   const { turn, phase, skip, autoOpenChunkId } = useReplay()
 
   function askYourself() {
@@ -31,6 +37,9 @@ export default function DemoStage({ onAsk }: { onAsk: (q: string) => void }) {
           )}
           <button type="button" className="demo-cta" onClick={askYourself}>
             Ask your own question
+          </button>
+          <button type="button" className="chip" onClick={onOpenFeatures}>
+            See all features
           </button>
         </div>
       </div>

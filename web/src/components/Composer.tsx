@@ -5,9 +5,10 @@ interface Props {
   isBusy: boolean
   onAsk: (question: string) => void
   onClear: () => void
+  onOpenFeatures: () => void
 }
 
-export default function Composer({ isBusy, onAsk, onClear }: Props) {
+export default function Composer({ isBusy, onAsk, onClear, onOpenFeatures }: Props) {
   const [value, setValue] = useState('')
 
   function submit(e: React.FormEvent) {
@@ -21,7 +22,7 @@ export default function Composer({ isBusy, onAsk, onClear }: Props) {
   return (
     <div className="composer">
       <div className="composer-inner">
-        <ExampleChips disabled={isBusy} onPick={onAsk} />
+        <ExampleChips disabled={isBusy} onPick={onAsk} onOpenFeatures={onOpenFeatures} />
         <form onSubmit={submit}>
           <input
             value={value}

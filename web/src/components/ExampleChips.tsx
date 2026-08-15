@@ -5,7 +5,15 @@ const CHIPS = [
   { q: "Compare JPMorgan's revenue to its current market cap.", label: 'JPM revenue vs cap' },
 ]
 
-export default function ExampleChips({ disabled, onPick }: { disabled: boolean; onPick: (q: string) => void }) {
+export default function ExampleChips({
+  disabled,
+  onPick,
+  onOpenFeatures,
+}: {
+  disabled: boolean
+  onPick: (q: string) => void
+  onOpenFeatures?: () => void
+}) {
   return (
     <div className="chips">
       {CHIPS.map((chip) => (
@@ -13,6 +21,11 @@ export default function ExampleChips({ disabled, onPick }: { disabled: boolean; 
           {chip.label}
         </button>
       ))}
+      {onOpenFeatures && (
+        <button type="button" className="chip" disabled={disabled} onClick={onOpenFeatures}>
+          See all features
+        </button>
+      )}
     </div>
   )
 }

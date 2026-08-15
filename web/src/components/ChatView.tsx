@@ -5,7 +5,15 @@ import type { ChatTurn } from '../hooks/useChat'
 
 const STICK_PX = 96
 
-export default function ChatView({ turns, onAsk }: { turns: ChatTurn[]; onAsk: (q: string) => void }) {
+export default function ChatView({
+  turns,
+  onAsk,
+  onOpenFeatures,
+}: {
+  turns: ChatTurn[]
+  onAsk: (q: string) => void
+  onOpenFeatures: () => void
+}) {
   const rootRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
   const prevLen = useRef(0)
@@ -34,7 +42,7 @@ export default function ChatView({ turns, onAsk }: { turns: ChatTurn[]; onAsk: (
   if (!turns.length) {
     return (
       <div className="thread" ref={rootRef}>
-        <DemoStage onAsk={onAsk} />
+        <DemoStage onAsk={onAsk} onOpenFeatures={onOpenFeatures} />
       </div>
     )
   }

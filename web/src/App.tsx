@@ -193,7 +193,7 @@ function App() {
         )}
         <SavePrompt show={showSavePrompt} onLogin={login} onDismiss={handleDismissSave} />
         <section className="workspace">
-          {view === 'chat' && <ChatView turns={turns} onAsk={ask} />}
+          {view === 'chat' && <ChatView turns={turns} onAsk={ask} onOpenFeatures={() => setView('features')} />}
           {view === 'screener' && <ScreenerView onCompare={handleCompare} onInsight={handleInsight} />}
           {view === 'compare' && <CompareView tickers={compareTickers} />}
           {view === 'portfolio' && <PortfolioView onExplain={handleExplainPortfolio} />}
@@ -212,7 +212,9 @@ function App() {
           )}
           {view === 'admin' && isAdmin && <AdminView />}
         </section>
-        {view === 'chat' && <Composer isBusy={isBusy} onAsk={ask} onClear={newChat} />}
+        {view === 'chat' && (
+          <Composer isBusy={isBusy} onAsk={ask} onClear={newChat} onOpenFeatures={() => setView('features')} />
+        )}
       </main>
       <WatchlistPanel companies={companies} onInsight={handleInsight} />
     </div>
