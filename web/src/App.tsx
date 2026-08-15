@@ -8,6 +8,7 @@ import CompareView from './components/CompareView'
 import PortfolioView from './components/PortfolioView'
 import InsightView from './components/InsightView'
 import AdminView from './components/AdminView'
+import FeaturesView from './components/FeaturesView'
 import UserMenu from './components/UserMenu'
 import SavePrompt from './components/SavePrompt'
 import { DEFAULT_PROMPTS, useChat } from './hooks/useChat'
@@ -144,6 +145,7 @@ function App() {
     compare: 'Side-by-side comparison',
     portfolio: 'Track your holdings and allocation',
     insight: 'Quote, valuation, ranks, and filing narrative for one company',
+    features: 'What each part of FinSight does',
     admin: 'Requests, latency, token spend, and refusal rate',
   }
 
@@ -196,6 +198,18 @@ function App() {
           {view === 'compare' && <CompareView tickers={compareTickers} />}
           {view === 'portfolio' && <PortfolioView onExplain={handleExplainPortfolio} />}
           {view === 'insight' && <InsightView companies={companies} initialTicker={insightTicker} />}
+          {view === 'features' && (
+            <FeaturesView
+              isBusy={isBusy}
+              oauthConfigured={oauthConfigured}
+              onOpen={setView}
+              onTry={(q) => {
+                setView('chat')
+                ask(q)
+              }}
+              onLogin={login}
+            />
+          )}
           {view === 'admin' && isAdmin && <AdminView />}
         </section>
         {view === 'chat' && <Composer isBusy={isBusy} onAsk={ask} onClear={newChat} />}

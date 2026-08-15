@@ -91,7 +91,7 @@ export interface Turn {
   data: ChatResponse
 }
 
-export type View = 'chat' | 'screener' | 'compare' | 'portfolio' | 'insight' | 'admin'
+export type View = 'chat' | 'screener' | 'compare' | 'portfolio' | 'insight' | 'features' | 'admin'
 
 export interface ToolCallSummary {
   tool: string
