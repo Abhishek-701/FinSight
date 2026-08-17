@@ -112,6 +112,16 @@ def _database_status() -> dict:
         return {"backend": storage.backend_name(), "ok": False, "error": str(exc)}
 
 
+def _safe_status(fn) -> dict:
+    """Run a store's status() for the health endpoint without letting a DB outage 500 the
+    whole route (and, via healthCheckPath, crash-loop the service — see _database_status,
+    which this mirrors). Each store's status() opens its own connection and can raise."""
+    try:
+        return fn()
+    except Exception as exc:  # noqa: BLE001 — health check must never 500 the endpoint
+        return {"backend": storage.backend_name(), "ok": False, "error": str(exc)}
+
+
 def _startup_errors() -> list[str]:
     errors = []
     if not config.CHUNKS_PATH.exists():
@@ -684,10 +694,10 @@ def health():
         "openai_configured": bool(config.OPENAI_API_KEY) if hasattr(config, "OPENAI_API_KEY") else None,
         "anthropic_configured": bool(config.ANTHROPIC_API_KEY) if hasattr(config, "ANTHROPIC_API_KEY") else None,
         "session_store": session.status(),
-        "watchlist_store": watchlist.status(),
-        "portfolio_store": portfolio.status(),
-        "audit_log": audit.status(),
-        "metrics_store": metrics.status(),
+        "watchlist_store": _safe_status(watchlist.status),
+        "portfolio_store": _safe_status(portfolio.status),
+        "audit_log": _safe_status(audit.status),
+        "metrics_store": _safe_status(metrics.status),
         "database": _database_status(),
         "corpus": _corpus_status(),
         "external_state": {
