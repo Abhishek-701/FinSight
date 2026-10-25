@@ -13,6 +13,11 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      # Revenium AI usage metering. Unset, metering is disabled and the app runs normally.
+      - key: REVENIUM_METERING_API_KEY
+        sync: false
+      - key: REVENIUM_METERING_BASE_URL
+        value: https://api.revenium.ai
       - key: FINSIGHT_USE_RERANKER
         value: "0"
       - key: FINSIGHT_RATE_LIMIT_PER_MINUTE
