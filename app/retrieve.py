@@ -67,7 +67,8 @@ def invalidate() -> None:
 
 @lru_cache(maxsize=256)
 def _embed_query(query: str) -> tuple[float, ...]:
-    resp = OpenAI().embeddings.create(model=config.EMBED_MODEL, input=[query])
+    resp = OpenAI().embeddings.create(model=config.EMBED_MODEL, input=[query],
+                                         usage_metadata=config.USAGE_METADATA)
     obs.add_embed_tokens(resp.usage.total_tokens)
     return tuple(resp.data[0].embedding)
 

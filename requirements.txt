@@ -3,7 +3,8 @@ beautifulsoup4==4.12.3   # real HTML parser; strips <style>/<script>/hidden node
 lxml==5.3.0              # fast parser backend for BeautifulSoup
 rank_bm25==0.2.2         # BM25 lexical retrieval (the sparse half of hybrid)
 chromadb==1.5.9          # local persisted vector store; 1.5.x ships cp313 Windows wheels (0.5.x needs a C++ build)
-openai==1.59.6           # embeddings only (text-embedding-3-small)
+openai==1.109.1          # embeddings only (text-embedding-3-small); >=1.66 needed by revenium middleware (openai.resources.responses)
+revenium-python-sdk[openai,anthropic]==0.11.0  # usage metering for anthropic + openai calls (replaces yanked revenium-middleware-*)
 anthropic==0.109.1       # chat LLM (decompose + synthesize); 0.42 lacked output_config (structured JSON)
 fastapi==0.138.1         # backend
 uvicorn==0.49.0          # ASGI server

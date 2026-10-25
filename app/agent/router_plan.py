@@ -153,6 +153,7 @@ def llm_route(question: str, route: dict) -> dict | None:
             system=[{"type": "text", "text": _SYSTEM, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": f"Question: {question}"}],
             output_config={"format": {"type": "json_schema", "schema": _build_schema()}},
+            usage_metadata=config.USAGE_METADATA,
         )
         obs.add_llm_usage(config.ROUTER_MODEL, msg.usage.input_tokens, msg.usage.output_tokens)
         text = next(b.text for b in msg.content if b.type == "text")

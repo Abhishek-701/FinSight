@@ -21,7 +21,8 @@ BATCH = 100
 def embed_texts(client: OpenAI, texts: list[str]) -> list[list[float]]:
     out: list[list[float]] = []
     for i in range(0, len(texts), BATCH):
-        resp = client.embeddings.create(model=config.EMBED_MODEL, input=texts[i:i + BATCH])
+        resp = client.embeddings.create(model=config.EMBED_MODEL, input=texts[i:i + BATCH],
+                                    usage_metadata=config.USAGE_METADATA)
         out.extend(d.embedding for d in resp.data)
         print(f"  embedded {min(i + BATCH, len(texts))}/{len(texts)}")
     return out

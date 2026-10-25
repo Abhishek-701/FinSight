@@ -104,6 +104,7 @@ def judge_case(case: dict, res: dict) -> dict:
             system=_system(rubric_names),
             messages=[{"role": "user", "content": _user_payload(case, res, rubric_names)}],
             output_config={"format": {"type": "json_schema", "schema": _SCHEMA}},
+            usage_metadata=config.USAGE_METADATA,
         )
         obs.add_llm_usage(JUDGE_MODEL, msg.usage.input_tokens, msg.usage.output_tokens)
         text = next(b.text for b in msg.content if b.type == "text")

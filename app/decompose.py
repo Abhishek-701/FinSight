@@ -45,6 +45,7 @@ def decompose(question: str, tickers: list[str]) -> list[dict]:
         system=system,
         messages=[{"role": "user", "content": f"Companies: {targets}\nQuestion: {question}"}],
         output_config={"format": {"type": "json_schema", "schema": _SCHEMA}},
+        usage_metadata=config.USAGE_METADATA,
     )
     obs.add_llm_usage(config.CHAT_MODEL, msg.usage.input_tokens, msg.usage.output_tokens)
     import json

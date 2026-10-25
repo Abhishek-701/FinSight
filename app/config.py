@@ -7,6 +7,15 @@ from dotenv import load_dotenv
 
 load_dotenv()  # load OPENAI_API_KEY + ANTHROPIC_API_KEY from .env before any client init
 
+# Revenium usage metering: patches the anthropic/openai SDKs on import, so it must come after
+# load_dotenv() (reads REVENIUM_METERING_API_KEY) and before any client call. Every module that
+# creates a client imports config first. Metering is a no-op (logs one error) without the key.
+import revenium_middleware.anthropic  # noqa: E402,F401
+import revenium_middleware.openai  # noqa: E402,F401
+
+# Passed as usage_metadata= on every metered call (the middleware strips it before the SDK call).
+USAGE_METADATA = {"productName": "finsight"}
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 

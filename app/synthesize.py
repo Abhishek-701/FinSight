@@ -275,6 +275,7 @@ def stream_answer(question: str, chunks: list[dict], guidance: str | None = None
             yield text
         final = stream.get_final_message()
         obs.add_llm_usage(config.CHAT_MODEL, final.usage.input_tokens, final.usage.output_tokens)
+        usage_metadata=config.USAGE_METADATA,
 
 
 def stream_section(query: str, chunks: list[dict]):
@@ -303,6 +304,7 @@ def stream_section(query: str, chunks: list[dict]):
             yield text
         final = stream.get_final_message()
         obs.add_llm_usage(config.CHAT_MODEL, final.usage.input_tokens, final.usage.output_tokens)
+        usage_metadata=config.USAGE_METADATA,
 
 
 def synthesize_section(query: str, chunks: list[dict]) -> str:
